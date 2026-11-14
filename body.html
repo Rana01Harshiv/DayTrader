@@ -1,27 +1,78 @@
+<style>
+.status{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pill{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 12px;font-size:12px}
+.pill b{font-size:13px}.open{color:var(--up)}.closed{color:var(--mut)}
+.stale{border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px;border:1px solid var(--line);background:var(--card);color:var(--mut)}
+.stale.old{border-color:var(--dn);color:var(--dn);font-weight:600}
+.star{border:0;background:none;cursor:pointer;font-size:18px;color:var(--mut);padding:0 6px}.star.on{color:#f5b301}
+.btns{display:flex;gap:8px;margin-top:10px}.btns button{flex:1;margin:0;width:auto}
+button.log{padding:8px;border:1px solid var(--ac);border-radius:8px;background:none;color:var(--ac);font-weight:600;cursor:pointer}
+.risk{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px}
+.risk.over{border-color:var(--dn)}.risk .over{color:var(--dn);font-weight:700}
+.meter{height:6px;background:var(--bg);border-radius:4px;margin-top:6px;overflow:hidden}.meter i{display:block;height:100%;background:var(--ac)}
+.risk.over .meter i{background:var(--dn)}
+h2{font-size:16px;margin:26px 0 8px}
+.jin{width:84px;padding:4px 6px;border:1px solid var(--line);background:var(--bg);color:var(--tx);border-radius:6px;font-size:12px}
+.sum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.x{border:0;background:none;color:var(--dn);cursor:pointer;font-size:14px}
+</style>
+<div class="stale" id="stale"></div>
+<div class="status" id="status"></div>
 <div class="bar">
   <span class="lbl">Foreign acct $</span><input class="inp" id="acct" type="number" value="10000" min="100">
   <span class="lbl">Indian acct ₹</span><input class="inp" id="acctIN" type="number" value="1000000" min="1000" style="width:110px">
-  <span class="lbl">Risk %</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+  <span class="lbl">Risk % / trade</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+  <span class="lbl">Daily loss limit %</span><input class="inp" id="dpct" type="number" value="3" step="0.5" min="0.5">
 </div>
-<div class="bar"><span id="mkts"></span><span class="sp"></span><span id="chips"></span></div>
+<div id="riskbox"></div>
+<div class="bar"><span class="lbl">Market</span><span id="mkts"></span><span class="lbl">Side</span><span id="sides"></span></div>
+<div class="bar" id="idxbar"><span class="lbl">Index</span><span id="idxs"></span></div>
+<div class="bar"><span class="lbl">Setup</span><span id="chips"></span><span class="sp"></span><button class="chip" id="wonly"></button><span id="count" class="lbl"></span><button class="chip" id="more"></button></div>
 <div class="cards" id="cards"></div>
 <div class="tw"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
-<div class="note">Long side only. Entry = last session high + 1 tick · Stop = entry − 2×ATR(14) of 5-min bars, rounded down · T1 = 1R, T2 = 2R · Shares = the smallest of four limits: max loss, position cap (75% of account), max order (80%), cash after a 10% buffer. Indian stocks are NSE and sized on the Indian account in ₹; foreign stocks are US and sized on the $ account. Setups: 20-day closing breakout, bull flag, reclaim of the 20-day average, oversold bounce, 15-min opening-range breakout. A matched rule is not a buy signal. Stops are plans, not guarantees. Flat by 15:55 ET (US) / 15:15 IST (India). Click a column header to sort.</div>
+<h2>Trade journal (paper trades)</h2>
+<div class="sum" id="jsum"></div>
+<div class="tw"><table style="min-width:980px"><thead><tr><th class="l">Date</th><th class="l">Trade</th><th>Plan entry</th><th>Stop</th><th>T1 / T2</th><th>Qty</th><th>Actual entry</th><th>Actual exit</th><th>P&amp;L</th><th class="l">Status</th><th></th></tr></thead><tbody id="jbody"></tbody></table></div>
+<div class="note">Journal and watchlist are saved only in this browser (not shared, not uploaded). Clearing site data erases them. P&amp;L is shown per currency and ignores brokerage, taxes and slippage.</div>
+<div class="note">LONG: entry = last session high + 1 tick, stop below. SHORT: entry = last session low − 1 tick, stop above. Stop = 2×ATR(14) of 5-min bars away from entry, T1 = 1R, T2 = 2R. Shares = the smallest of four limits: max loss, position cap (75% of account), max order (80%), cash after a 10% buffer. Indian stocks are NSE (Nifty 100 + Bank Nifty universe) sized on the ₹ account; foreign stocks are US, sized on the $ account. Long setups: 20-day breakout, bull flag, reclaim of 20-day average, oversold bounce, opening-range breakout. Short setups are the mirror: 20-day breakdown, bear flag, loss of 20-day average, overbought rejection, opening-range breakdown. Shorting needs a broker that allows it (intraday in India; margin account in the US) and carries unlimited-loss risk. Market status ignores exchange holidays. A matched rule is not a trade signal. Stops are plans, not guarantees. Flat by 15:55 ET (US) / 15:15 IST (India). Click a column header to sort.</div>
 <script>
 const DATA=/*DATA*/;
-const P=DATA.picks;let mkt='All',filter='All',sortK='score',sortD=-1;
+const P=DATA.picks;let mkt='All',side='All',idx='All',filter='All',showAll=false,wonly=false,sortK='score',sortD=-1;
 const $=id=>document.getElementById(id), f=(x,d=2)=>Number(x).toFixed(d);
 const fm=(s,x,d=2)=>(s.market==='IN'?'₹':'$')+Number(x).toLocaleString(s.market==='IN'?'en-IN':'en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const mk=s=>s.market==='IN'?'NSE':'US';
+const IDXN={nifty50:'Nifty 50',nifty100:'Nifty 100',banknifty:'Bank Nifty'};
 const dec=x=>String(x).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-$('meta').textContent='Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid stocks, '+DATA.matched+' matched a rule, top 10 per market shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
-function calc(s){const a=+$(s.market==='IN'?'acctIN':'acct').value||0,rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
+const key=s=>s.market+':'+s.t+':'+s.dir;
+const today=()=>new Date().toLocaleDateString('en-CA');
+/* ---- browser storage (safe) ---- */
+function ld(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let watch=ld('ts_watch',[]),journal=ld('ts_journal',[]);
+['acct','acctIN','rpct','dpct'].forEach(i=>{const v=ld('ts_'+i,null);if(v!==null)$(i).value=v});
+/* ---- stale banner ---- */
+function staleBanner(){const h=(Date.now()-new Date(DATA.generated))/36e5;
+ const age=h<1?Math.round(h*60)+' min':h<48?f(h,1)+' hours':f(h/24,1)+' days';
+ const el=$('stale');el.className='stale'+(h>24?' old':'');
+ el.textContent=(h>24?'⚠ Data is '+age+' old. The scheduled refresh may have failed, so do not rely on these levels. ':'Data updated '+age+' ago ('+new Date(DATA.generated).toLocaleString()+'). ')+'Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' stocks, '+DATA.matched+' long/short matches.'}
+/* ---- market status ---- */
+function lt(tz){const p={};new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date()).forEach(x=>p[x.type]=x.value);
+ return {d:{Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0}[p.weekday],m:(+p.hour%24)*60+ +p.minute}}
+function dur(m){m=Math.round(m);const d=Math.floor(m/1440),h=Math.floor(m%1440/60),mi=m%60;return (d?d+'d ':'')+(h?h+'h ':'')+(d?'':mi+'m')}
+function mstat(name,tz,o,c){const t=lt(tz),wk=t.d>=1&&t.d<=5;
+ if(wk&&t.m>=o&&t.m<c)return '<span class="pill"><b>'+name+'</b> <span class="open">● OPEN</span> · closes in '+dur(c-t.m)+'</span>';
+ let add=0;if(wk&&t.m<o)add=o-t.m;else{let d=1,dd=(t.d+1)%7;while(dd<1||dd>5){d++;dd=(dd+1)%7}add=(1440-t.m)+(d-1)*1440+o}
+ return '<span class="pill"><b>'+name+'</b> <span class="closed">○ CLOSED</span> · opens in '+dur(add)+'</span>'}
+function statusBar(){$('status').innerHTML=mstat('NSE India','Asia/Kolkata',9*60+15,15*60+30)+mstat('US (NYSE/Nasdaq)','America/New_York',9*60+30,16*60)}
+/* ---- sizing ---- */
+function acctOf(m){return +$(m==='IN'?'acctIN':'acct').value||0}
+function calc(s){const a=acctOf(s.market),rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
  const lim={'max loss':rd/s.risk,'position cap':a*C.max_position_pct/100/s.entry,'max order':a*0.8/s.entry,'cash':a*(1-C.cash_buffer_pct/100)/s.entry};
  let q=Infinity,by='';for(const k in lim){const v=Math.floor(lim[k]);if(v<q){q=v;by=k}}q=Math.max(q,0);
  return Object.assign({},s,{qty:q,by:by,riskAmt:q*s.risk,pos:q*s.entry})}
-function plan(s){return 'LONG '+s.t+' ('+mk(s)+') - '+s.setups.join(' + ')+'\n'+
- 'Entry: buy above '+fm(s,s.entry)+' (break of last session high)\n'+
+function plan(s){const sh=s.dir==='SHORT';return s.dir+' '+s.t+' ('+mk(s)+(s.indices&&s.indices.length?', '+s.indices.map(i=>IDXN[i]).join('/'):'')+') - '+s.setups.join(' + ')+'\n'+
+ 'Entry: '+(sh?'sell short below ':'buy above ')+fm(s,s.entry)+' (break of last session '+(sh?'low':'high')+')\n'+
  'Stop-loss: '+fm(s,s.stop)+'\n'+
  'Target 1: '+fm(s,s.t1)+' (1R) | Target 2: '+fm(s,s.t2)+' (2R)\n'+
  'Qty: '+s.qty+' sh (~'+fm(s,s.pos,0)+', sized by '+s.by+') | Max loss at stop: '+fm(s,s.riskAmt,2)+'\n'+
@@ -29,32 +80,88 @@ function plan(s){return 'LONG '+s.t+' ('+mk(s)+') - '+s.setups.join(' + ')+'\n'+
 async function copy(i,btn){const t=plan(view()[i]);
  try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e2){}a.remove()}
  const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)}
+/* ---- journal ---- */
+const SYM=m=>m==='IN'?'₹':'$';
+const jstatus=j=>j.exit!==''&&j.exit!=null?'closed':(j.actual!==''&&j.actual!=null?'open':'planned');
+const jpnl=j=>{if(jstatus(j)!=='closed')return null;const e=(j.actual!==''&&j.actual!=null)?+j.actual:j.entry;return (j.dir==='LONG'?1:-1)*(+j.exit-e)*j.qty};
+function logTrade(s){const id=key(s)+'@'+today();if(journal.some(j=>j.id===id))return false;
+ journal.unshift({id:id,date:today(),t:s.t,market:s.market,dir:s.dir,setup:s.setups.join(' + '),entry:s.entry,stop:s.stop,t1:s.t1,t2:s.t2,qty:s.qty,risk:s.risk,actual:'',exit:''});sv('ts_journal',journal);return true}
+function riskUsed(m){let used=0;journal.forEach(j=>{if(j.market!==m||j.date!==today())return;const st=jstatus(j);
+ if(st!=='closed')used+=j.qty*j.risk;else{const p=jpnl(j);if(p<0)used+=-p}});return used}
+function renderRisk(){const dp=+$('dpct').value||0;let h='';
+ ['US','IN'].forEach(m=>{const lim=acctOf(m)*dp/100,used=riskUsed(m),pc=lim?Math.min(100,used/lim*100):0,over=used>lim&&lim>0;
+  h+='<div class="risk'+(over?' over':'')+'" style="display:inline-block;min-width:260px;margin-right:8px"><b>'+(m==='IN'?'India':'Foreign')+' today:</b> risk used '+SYM(m)+Number(used).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+' of '+SYM(m)+Number(lim).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+' limit'+(over?' <span class="over">· OVER LIMIT, stop trading today</span>':'')+'<div class="meter"><i style="width:'+pc+'%"></i></div></div>'});
+ $('riskbox').innerHTML=h}
+function renderJournal(){
+ $('jbody').innerHTML=journal.map((j,i)=>{const st=jstatus(j),p=jpnl(j);
+  return '<tr><td class="l">'+j.date+'</td><td class="l"><b>'+esc(j.t)+'</b> <span class="tag '+j.dir+'">'+j.dir+'</span> <small>'+(j.market==='IN'?'NSE':'US')+'</small></td>'+
+  '<td>'+SYM(j.market)+f(j.entry)+'</td><td class="neg">'+SYM(j.market)+f(j.stop)+'</td><td>'+SYM(j.market)+f(j.t1)+' / '+SYM(j.market)+f(j.t2)+'</td><td>'+j.qty+'</td>'+
+  '<td><input class="jin" data-j="'+i+'" data-f="actual" type="number" step="0.01" value="'+(j.actual===''?'':j.actual)+'" placeholder="fill price"></td>'+
+  '<td><input class="jin" data-j="'+i+'" data-f="exit" type="number" step="0.01" value="'+(j.exit===''?'':j.exit)+'" placeholder="exit price"></td>'+
+  '<td class="'+(p==null?'':p>=0?'pos':'neg')+'">'+(p==null?'–':(p>=0?'+':'−')+SYM(j.market)+Math.abs(p).toLocaleString(j.market==='IN'?'en-IN':'en-US',{maximumFractionDigits:2}))+'</td>'+
+  '<td class="l">'+st+'</td><td><button class="x" data-del="'+i+'" title="Delete">✕</button></td></tr>'}).join('')||'<tr><td class="l" colspan="11" style="color:var(--mut)">No trades logged yet. Use “Log trade” on a card to add one, then fill the actual entry and exit prices.</td></tr>';
+ let sum='';['US','IN'].forEach(m=>{const cl=journal.filter(j=>j.market===m&&jstatus(j)==='closed');if(!cl.length)return;
+  const w=cl.filter(j=>jpnl(j)>0).length,tot=cl.reduce((a,j)=>a+jpnl(j),0);
+  sum+='<span class="pill"><b>'+(m==='IN'?'India':'Foreign')+'</b> · '+cl.length+' closed · win rate '+Math.round(w/cl.length*100)+'% · net <span class="'+(tot>=0?'pos':'neg')+'">'+(tot>=0?'+':'−')+SYM(m)+Math.abs(tot).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+'</span></span>'});
+ $('jsum').innerHTML=sum||'<span class="pill">Closed-trade stats appear here once you enter exit prices.</span>';
+ renderRisk()}
+/* ---- list / filters ---- */
 const cols=[['t','Ticker','l'],['dir','Side','l'],['price','Price'],['gap','Gap %'],['rvol','RVOL'],['setup','Setup','l'],['entry','Entry'],['stop','Stop'],['t1','T1'],['t2','T2'],['risk','R:R (T1/T2)'],['qty','Shares']];
-function view(){let v=P.map(calc);if(mkt!=='All')v=v.filter(s=>s.market===mkt);
+function base(){let v=P.map(calc);
+ if(mkt!=='All')v=v.filter(s=>s.market===mkt);
+ if(side!=='All')v=v.filter(s=>s.dir===side);
+ if(idx!=='All')v=v.filter(s=>s.indices&&s.indices.indexOf(idx)>-1);
+ if(wonly)v=v.filter(s=>watch.indexOf(key(s))>-1);
+ return v}
+function view(){let v=base();
  if(filter!=='All')v=v.filter(s=>s.setups.indexOf(filter)>-1);
- return v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD)}
+ v.sort((a,b)=>b.score-a.score);
+ if(!showAll&&!wonly){const n={};v=v.filter(s=>{const k=s.market+s.dir;n[k]=(n[k]||0)+1;return n[k]<=10||watch.indexOf(key(s))>-1})}
+ v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
+ return v.sort((a,b)=>(watch.indexOf(key(b))>-1)-(watch.indexOf(key(a))>-1))}
+function chipRow(el,list,cur,attr){$(el).innerHTML=list.map(m=>'<button class="chip '+(m[0]===cur?'on':'')+'" data-'+attr+'="'+esc(m[0])+'">'+esc(m[1])+'</button>').join(' ')}
+const starBtn=s=>'<button class="star '+(watch.indexOf(key(s))>-1?'on':'')+'" data-star="'+esc(key(s))+'" title="Watchlist">'+(watch.indexOf(key(s))>-1?'★':'☆')+'</button>';
 function render(){
- const MK=[['All','All markets'],['IN','Indian stocks'],['US','Foreign (US) stocks']];
- $('mkts').innerHTML=MK.map(m=>'<button class="chip '+(m[0]===mkt?'on':'')+'" data-m="'+m[0]+'">'+m[1]+'</button>').join(' ');
- const sets=['All'].concat(Array.from(new Set([].concat.apply([],P.filter(s=>mkt==='All'||s.market===mkt).map(s=>s.setups)))));
- $('chips').innerHTML=sets.map(s=>'<button class="chip '+(s===filter?'on':'')+'" data-f="'+esc(s)+'">'+esc(s)+'</button>').join(' ');
- const v=view();
- $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+esc(s.t)+' <small class="px">'+mk(s)+'</small></span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
+ if(mkt!=='IN')idx='All';
+ chipRow('mkts',[['All','All markets'],['IN','Indian stocks'],['US','Foreign (US) stocks']],mkt,'m');
+ chipRow('sides',[['All','Long + Short'],['LONG','Long'],['SHORT','Short']],side,'s');
+ $('idxbar').style.display=mkt==='IN'?'flex':'none';
+ chipRow('idxs',[['All','All Indian'],['nifty50','Nifty 50'],['nifty100','Nifty 100'],['banknifty','Bank Nifty']],idx,'i');
+ const sets=['All'].concat(Array.from(new Set([].concat.apply([],base().map(s=>s.setups)))));
+ if(sets.indexOf(filter)<0)filter='All';
+ chipRow('chips',sets.map(s=>[s,s]),filter,'f');
+ $('wonly').className='chip'+(wonly?' on':'');$('wonly').textContent='★ Watchlist ('+watch.length+')';
+ const v=view(),total=base().filter(s=>filter==='All'||s.setups.indexOf(filter)>-1).length;
+ $('count').textContent='Showing '+v.length+' of '+total;
+ $('more').style.display=(total>v.length||showAll)&&!wonly?'inline-block':'none';$('more').textContent=showAll?'Show top 10 only':'Show all '+total;
+ $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+esc(s.t)+' <small class="px">'+mk(s)+'</small>'+starBtn(s)+'</span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
  '<div class="px">'+fm(s,s.price)+' · gap <span class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</span> · RVOL '+f(s.rvol)+'×'+(s.moving?' · <b class="neg">MOVING</b>':'')+'</div>'+
+ (s.indices&&s.indices.length?'<div class="px">'+esc(s.indices.map(i=>IDXN[i]).join(' · '))+'</div>':'')+
  '<div class="setup">'+esc(s.setups.join(' + '))+(s.orbHit?' <span class="px">(ORB '+s.orbHit+')</span>':'')+'</div><div class="news">'+(s.news&&s.news[0]&&s.news[0].title?esc(dec(s.news[0].title))+' <i>('+esc(s.news[0].pub||'')+')</i>':'No headline found')+'</div>'+
- '<div class="g"><div><b>Entry (buy above)</b><span>'+fm(s,s.entry)+'</span></div><div><b>Stop</b><span class="sl">'+fm(s,s.stop)+'</span></div>'+
+ '<div class="g"><div><b>Entry ('+(s.dir==='SHORT'?'sell below':'buy above')+')</b><span>'+fm(s,s.entry)+'</span></div><div><b>Stop</b><span class="sl">'+fm(s,s.stop)+'</span></div>'+
  '<div><b>Target 1 (1R)</b><span class="tg">'+fm(s,s.t1)+'</span></div><div><b>Target 2 (2R)</b><span class="tg">'+fm(s,s.t2)+'</span></div>'+
  '<div><b>R:R (T1 / T2)</b><span>1 / 2</span></div><div><b>Shares</b><span>'+s.qty+'</span> <small class="px">'+s.by+'</small></div></div>'+
- '<button class="copy" data-c="'+i+'">Copy Trade Plan</button></div>').join('')||'<div class="px">No setups match this filter.</div>';
- $('head').innerHTML=cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
- $('body').innerHTML=v.map(s=>'<tr><td class="l"><b>'+esc(s.t)+'</b> <small>'+mk(s)+'</small></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>'+fm(s,s.price)+'</td>'+
+ '<div class="btns"><button class="copy" data-c="'+i+'">Copy Trade Plan</button><button class="log" data-l="'+i+'">'+(journal.some(j=>j.id===key(s)+'@'+today())?'Logged ✓':'Log trade')+'</button></div></div>').join('')||'<div class="px">No setups match this filter.</div>';
+ $('head').innerHTML='<th class="l"></th>'+cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
+ $('body').innerHTML=v.map(s=>'<tr><td class="l">'+starBtn(s)+'</td><td class="l"><b>'+esc(s.t)+'</b> <small>'+mk(s)+'</small></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>'+fm(s,s.price)+'</td>'+
  '<td class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</td><td>'+f(s.rvol)+'×</td><td class="l">'+esc(s.setups.join(' + '))+'</td><td>'+fm(s,s.entry)+'</td><td class="neg">'+fm(s,s.stop)+'</td>'+
- '<td class="pos">'+fm(s,s.t1)+'</td><td class="pos">'+fm(s,s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('')}
+ '<td class="pos">'+fm(s,s.t1)+'</td><td class="pos">'+fm(s,s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('');
+ renderJournal()}
 document.addEventListener('click',e=>{const t=e.target;
- if(t.dataset.m){mkt=t.dataset.m;filter='All';render()}
- else if(t.dataset.f){filter=t.dataset.f;render()}
+ if(t.dataset.m){mkt=t.dataset.m;idx='All';filter='All';render()}
+ else if(t.dataset.s){side=t.dataset.s;filter='All';render()}
+ else if(t.dataset.i){idx=t.dataset.i;filter='All';render()}
+ else if(t.dataset.f&&t.classList.contains('chip')){filter=t.dataset.f;render()}
+ else if(t.id==='more'){showAll=!showAll;render()}
+ else if(t.id==='wonly'){wonly=!wonly;render()}
+ else if(t.dataset.star){const k=t.dataset.star,n=watch.indexOf(k);n>-1?watch.splice(n,1):watch.push(k);sv('ts_watch',watch);render()}
  else if(t.dataset.k){const k=t.dataset.k;sortD=sortK===k?-sortD:(['t','dir','setup'].includes(k)?1:-1);sortK=k;render()}
+ else if(t.dataset.l!==undefined){logTrade(view()[+t.dataset.l]);render()}
+ else if(t.dataset.del!==undefined){journal.splice(+t.dataset.del,1);sv('ts_journal',journal);renderJournal()}
  else if(t.dataset.c!==undefined)copy(+t.dataset.c,t)});
-['acct','acctIN','rpct'].forEach(i=>$(i).addEventListener('input',render));
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.j===undefined)return;
+ journal[+t.dataset.j][t.dataset.f]=t.value===''?'':+t.value;sv('ts_journal',journal);renderJournal()});
+['acct','acctIN','rpct','dpct'].forEach(i=>$(i).addEventListener('input',()=>{sv('ts_'+i,$(i).value);render()}));
+staleBanner();statusBar();setInterval(()=>{statusBar();staleBanner()},30000);
 render();
 </script>

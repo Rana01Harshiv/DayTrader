@@ -30,853 +30,81 @@ th.l,td.l{text-align:left}tr:last-child td{border:0}
 <h1>Intraday Trade Scanner</h1>
 <div class="sub" id="meta"></div>
 <div class="warn">Paper-trading planning tool, not financial advice. Levels are computed from the last completed session (date above) as trigger plans for the next open. Re-check price, pre-market and news before acting.</div>
+<style>
+.status{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pill{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 12px;font-size:12px}
+.pill b{font-size:13px}.open{color:var(--up)}.closed{color:var(--mut)}
+.stale{border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px;border:1px solid var(--line);background:var(--card);color:var(--mut)}
+.stale.old{border-color:var(--dn);color:var(--dn);font-weight:600}
+.star{border:0;background:none;cursor:pointer;font-size:18px;color:var(--mut);padding:0 6px}.star.on{color:#f5b301}
+.btns{display:flex;gap:8px;margin-top:10px}.btns button{flex:1;margin:0;width:auto}
+button.log{padding:8px;border:1px solid var(--ac);border-radius:8px;background:none;color:var(--ac);font-weight:600;cursor:pointer}
+.risk{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px}
+.risk.over{border-color:var(--dn)}.risk .over{color:var(--dn);font-weight:700}
+.meter{height:6px;background:var(--bg);border-radius:4px;margin-top:6px;overflow:hidden}.meter i{display:block;height:100%;background:var(--ac)}
+.risk.over .meter i{background:var(--dn)}
+h2{font-size:16px;margin:26px 0 8px}
+.jin{width:84px;padding:4px 6px;border:1px solid var(--line);background:var(--bg);color:var(--tx);border-radius:6px;font-size:12px}
+.sum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.x{border:0;background:none;color:var(--dn);cursor:pointer;font-size:14px}
+</style>
+<div class="stale" id="stale"></div>
+<div class="status" id="status"></div>
 <div class="bar">
   <span class="lbl">Foreign acct $</span><input class="inp" id="acct" type="number" value="10000" min="100">
   <span class="lbl">Indian acct ₹</span><input class="inp" id="acctIN" type="number" value="1000000" min="1000" style="width:110px">
-  <span class="lbl">Risk %</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+  <span class="lbl">Risk % / trade</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+  <span class="lbl">Daily loss limit %</span><input class="inp" id="dpct" type="number" value="3" step="0.5" min="0.5">
 </div>
-<div class="bar"><span id="mkts"></span><span class="sp"></span><span id="chips"></span></div>
+<div id="riskbox"></div>
+<div class="bar"><span class="lbl">Market</span><span id="mkts"></span><span class="lbl">Side</span><span id="sides"></span></div>
+<div class="bar" id="idxbar"><span class="lbl">Index</span><span id="idxs"></span></div>
+<div class="bar"><span class="lbl">Setup</span><span id="chips"></span><span class="sp"></span><button class="chip" id="wonly"></button><span id="count" class="lbl"></span><button class="chip" id="more"></button></div>
 <div class="cards" id="cards"></div>
 <div class="tw"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
-<div class="note">Long side only. Entry = last session high + 1 tick · Stop = entry − 2×ATR(14) of 5-min bars, rounded down · T1 = 1R, T2 = 2R · Shares = the smallest of four limits: max loss, position cap (75% of account), max order (80%), cash after a 10% buffer. Indian stocks are NSE and sized on the Indian account in ₹; foreign stocks are US and sized on the $ account. Setups: 20-day closing breakout, bull flag, reclaim of the 20-day average, oversold bounce, 15-min opening-range breakout. A matched rule is not a buy signal. Stops are plans, not guarantees. Flat by 15:55 ET (US) / 15:15 IST (India). Click a column header to sort.</div>
+<h2>Trade journal (paper trades)</h2>
+<div class="sum" id="jsum"></div>
+<div class="tw"><table style="min-width:980px"><thead><tr><th class="l">Date</th><th class="l">Trade</th><th>Plan entry</th><th>Stop</th><th>T1 / T2</th><th>Qty</th><th>Actual entry</th><th>Actual exit</th><th>P&amp;L</th><th class="l">Status</th><th></th></tr></thead><tbody id="jbody"></tbody></table></div>
+<div class="note">Journal and watchlist are saved only in this browser (not shared, not uploaded). Clearing site data erases them. P&amp;L is shown per currency and ignores brokerage, taxes and slippage.</div>
+<div class="note">LONG: entry = last session high + 1 tick, stop below. SHORT: entry = last session low − 1 tick, stop above. Stop = 2×ATR(14) of 5-min bars away from entry, T1 = 1R, T2 = 2R. Shares = the smallest of four limits: max loss, position cap (75% of account), max order (80%), cash after a 10% buffer. Indian stocks are NSE (Nifty 100 + Bank Nifty universe) sized on the ₹ account; foreign stocks are US, sized on the $ account. Long setups: 20-day breakout, bull flag, reclaim of 20-day average, oversold bounce, opening-range breakout. Short setups are the mirror: 20-day breakdown, bear flag, loss of 20-day average, overbought rejection, opening-range breakdown. Shorting needs a broker that allows it (intraday in India; margin account in the US) and carries unlimited-loss risk. Market status ignores exchange holidays. A matched rule is not a trade signal. Stops are plans, not guarantees. Flat by 15:55 ET (US) / 15:15 IST (India). Click a column header to sort.</div>
 <script>
-const DATA={
- "generated": "2026-11-14T15:59:20.438Z",
- "session": "2026-11-13",
- "sessionIN": "2026-11-13",
- "scanned": 159,
- "universe": 172,
- "matched": 82,
- "config": {
-  "budget": 10000,
-  "maxLoss": 100,
-  "cash_buffer_pct": 10,
-  "max_position_pct": 75,
-  "max_order_usd": 8000,
-  "min_price": 5,
-  "min_volume": 1000000
- },
- "picks": [
-  {
-   "t": "U",
-   "market": "US",
-   "price": 52.810001373291016,
-   "prev": 50.18000030517578,
-   "high": 52.88999938964844,
-   "low": 49.709999084472656,
-   "gap": 0.6377036526068247,
-   "chg": 5.241134021762783,
-   "rvol": 0.9337059965242187,
-   "rsi": 70.99669083208224,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 51.040000915527344,
-   "orl": 49.74599838256836,
-   "orbHit": "09:45",
-   "atr5": 0.16425977434430802,
-   "date": "2026-11-13",
-   "notional": 646051151.8001556,
-   "score": 7.506046203053053,
-   "entry": 52.9,
-   "stop": 52.57,
-   "risk": 0.33,
-   "t1": 53.23,
-   "t2": 53.56,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Unity (U) Stock Sees Fair Value Lift After Q3 Spurs Higher Analyst Targets",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 20:08:42 +0000"
-    },
-    {
-     "title": "Is Unity Software (U) Near A Take Private Deal?",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 15:11:36 +0000"
-    }
-   ],
-   "moving": true
-  },
-  {
-   "t": "KO",
-   "market": "US",
-   "price": 99.25,
-   "prev": 97.44000244140625,
-   "high": 99.30000305175781,
-   "low": 97.95999908447266,
-   "gap": 0.7594394963347018,
-   "chg": 1.8575508140839414,
-   "rvol": 0.9721676060645782,
-   "rsi": 73.48383553309574,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 98.82499694824219,
-   "orl": 97.95999908447266,
-   "orbHit": "10:30",
-   "atr5": 0.09677178519112724,
-   "date": "2026-11-13",
-   "notional": 1788733125,
-   "score": 6.52943285028976,
-   "entry": 99.31,
-   "stop": 99.11,
-   "risk": 0.2,
-   "t1": 99.51,
-   "t2": 99.71,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "3 Consumer Compounders That Fit Warren Buffett's Playbook. I'd Hold Them Forever.",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 14:35:00 +0000"
-    },
-    {
-     "title": "KO Stock Alert: Coca-Cola Just Hit a New All-Time High",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 21:05:06 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "META",
-   "market": "US",
-   "price": 641.6900024414062,
-   "prev": 623.6099853515625,
-   "high": 643.9099731445312,
-   "low": 624.7899780273438,
-   "gap": 0.5772897653433473,
-   "chg": 2.899250735962977,
-   "rvol": 0.6293744698006346,
-   "rsi": 47.79424649268532,
-   "setups": [
-    "Reclaim 20-DMA",
-    "ORB Breakout"
-   ],
-   "orh": 634.9400024414062,
-   "orl": 625,
-   "orbHit": "09:50",
-   "atr5": 1.2159075055803572,
-   "date": "2026-11-13",
-   "notional": 9707165511.932373,
-   "score": 6.499149690589528,
-   "entry": 643.92,
-   "stop": 641.48,
-   "risk": 2.44,
-   "t1": 646.36,
-   "t2": 648.8,
-   "setup": "Reclaim 20-DMA",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Italy fines Meta €805 million over access to Android users’ photos",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 15:29:55 +0000"
-    },
-    {
-     "title": "Billionaire Bill Ackman Says There’s a Huge Disconnect in Wall Street’s Expectations for Amazon, Microsoft, Meta, and Alphabet",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 15:05:02 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "PEP",
-   "market": "US",
-   "price": 145.44000244140625,
-   "prev": 142.25999450683594,
-   "high": 145.77999877929688,
-   "low": 142.52999877929688,
-   "gap": 0.3795926935002969,
-   "chg": 2.2353494006479124,
-   "rvol": 0.8244968948500727,
-   "rsi": 66.34435956103164,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 144.16000366210938,
-   "orl": 142.52999877929688,
-   "orbHit": "10:00",
-   "atr5": 0.17601449148995535,
-   "date": "2026-11-13",
-   "notional": 1150721299.3164062,
-   "score": 6.495101715044447,
-   "entry": 145.79,
-   "stop": 145.43,
-   "risk": 0.36,
-   "t1": 146.15,
-   "t2": 146.51,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "A $9.2 Billion Fund Dumps These 3 Stocks",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 16:06:51 +0000"
-    },
-    {
-     "title": "Procter &amp; Gamble or PepsiCo: The One Dividend Stock I’d Hold for the Next 20 Years",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 14:17:32 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "COST",
-   "market": "US",
-   "price": 1106.2099609375,
-   "prev": 1092.2099609375,
-   "high": 1109.5,
-   "low": 1092.6400146484375,
-   "gap": 0.21790726764381319,
-   "chg": 1.2818048269751303,
-   "rvol": 0.7866750898814383,
-   "rsi": 76.03356038984822,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 1105.219970703125,
-   "orl": 1092.6400146484375,
-   "orbHit": "09:45",
-   "atr5": 0.9195120675223214,
-   "date": "2026-11-13",
-   "notional": 2073148087.7929688,
-   "score": 6.171216537973978,
-   "entry": 1109.51,
-   "stop": 1107.67,
-   "risk": 1.84,
-   "t1": 1111.35,
-   "t2": 1113.19,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Walmart just took another step to beat Costco that could backfire",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 14:33:00 +0000"
-    },
-    {
-     "title": "‘They’re Getting Insider Information From Costco Employees’: Inside the Pokemon Card Line Where Resellers Buy Executive Memberships",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 09:07:29 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "JNJ",
-   "market": "US",
-   "price": 285.75,
-   "prev": 283.5199890136719,
-   "high": 288.1099853515625,
-   "low": 281.67999267578125,
-   "gap": 0.5220129245478988,
-   "chg": 0.7865445375072166,
-   "rvol": 0.8409115095245075,
-   "rsi": 65.62665184659406,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 286.3399963378906,
-   "orl": 284.0299987792969,
-   "orbHit": "10:30",
-   "atr5": 0.3080989292689732,
-   "date": "2026-11-13",
-   "notional": 1795081500,
-   "score": 6.076874870776672,
-   "entry": 288.12,
-   "stop": 287.5,
-   "risk": 0.62,
-   "t1": 288.74,
-   "t2": 289.36,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Did Bipolar Drug Win Just Shift JNJ's Investment Narrative?",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 20:08:45 +0000"
-    },
-    {
-     "title": "Pfizer or Johnson &amp; Johnson: The One Dividend Stock I’d Hold for the Next 20 Years",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 17:39:22 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "LLY",
-   "market": "US",
-   "price": 1443.5,
-   "prev": 1427.280029296875,
-   "high": 1449.6400146484375,
-   "low": 1419.77001953125,
-   "gap": 0.18426691530939454,
-   "chg": 1.1364252543430764,
-   "rvol": 0.6939707622810088,
-   "rsi": 69.72326923313327,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 1435.3499755859375,
-   "orl": 1420.760009765625,
-   "orbHit": "10:35",
-   "atr5": 1.8875732421875,
-   "date": "2026-11-13",
-   "notional": 3004789600,
-   "score": 6.0348983385839325,
-   "entry": 1449.65,
-   "stop": 1445.87,
-   "risk": 3.78,
-   "t1": 1453.43,
-   "t2": 1457.21,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Trump Touts Lilly’s “$3.5 Billion” Obesity Drug Plant, Its 10th New U.S. Site Since 2020",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 09:00:04 +0000"
-    },
-    {
-     "title": "What Eli Lilly Doubters Overlooked",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 01:11:12 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "LOW",
-   "market": "US",
-   "price": 227.72999572753906,
-   "prev": 227.4600067138672,
-   "high": 228.05999755859375,
-   "low": 223.6199951171875,
-   "gap": -1.081511756465281,
-   "chg": 0.11869735588794228,
-   "rvol": 0.9377078383058266,
-   "rsi": 66.48003569945143,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 226.64999389648438,
-   "orl": 223.6199951171875,
-   "orbHit": "10:45",
-   "atr5": 0.2621361868722098,
-   "date": "2026-11-13",
-   "notional": 728849851.3259888,
-   "score": 5.973317045072209,
-   "entry": 228.07,
-   "stop": 227.54,
-   "risk": 0.53,
-   "t1": 228.6,
-   "t2": 229.13,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Lowe's (LOW) Stock Looks Fairly Valued Despite Its 21% Run",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 05:17:42 +0000"
-    },
-    {
-     "title": "LOWE'S COMPANIES, INC. DECLARES CASH DIVIDEND",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 13 Nov 2026 21:30:00 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "NOW",
-   "market": "US",
-   "price": 102.25,
-   "prev": 100.66000366210938,
-   "high": 102.86000061035156,
-   "low": 99.69999694824219,
-   "gap": 1.5298959170537918,
-   "chg": 1.5795711107142951,
-   "rvol": 0.4193789741920631,
-   "rsi": 31.90899306929552,
-   "setups": [
-    "Oversold Bounce",
-    "ORB Breakout"
-   ],
-   "orh": 102.19999694824219,
-   "orl": 100.58000183105469,
-   "orbHit": "13:30",
-   "atr5": 0.17229843139648438,
-   "date": "2026-11-13",
-   "notional": 864278350,
-   "score": 5.893250307406351,
-   "entry": 102.87,
-   "stop": 102.52,
-   "risk": 0.35,
-   "t1": 103.22,
-   "t2": 103.57,
-   "setup": "Oversold Bounce",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "2 Stocks That Plunged on Oct. 29 to Buy and Hold Through 2030",
-     "pub": "Yahoo Finance",
-     "when": "Sat, 14 Nov 2026 09:01:02 +0000"
-    },
-    {
-     "title": "ServiceNow (NOW) Trades 42% Below Its High. Here’s Why Argus Still Rates It a Buy",
-     "pub": "Yahoo Finance",
-     "when": "Thu, 12 Nov 2026 23:15:35 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "SLB",
-   "market": "US",
-   "price": 51.66999816894531,
-   "prev": 50.90999984741211,
-   "high": 51.689998626708984,
-   "low": 50.880001068115234,
-   "gap": 1.0606971462302939,
-   "chg": 1.4928271927147518,
-   "rvol": 0.4085892917930464,
-   "rsi": 52.57965396411534,
-   "setups": [
-    "Reclaim 20-DMA",
-    "ORB Breakout"
-   ],
-   "orh": 51.54499816894531,
-   "orl": 51.2400016784668,
-   "orbHit": "15:55",
-   "atr5": 0.08839552743094307,
-   "date": "2026-11-13",
-   "notional": 262338914.70336914,
-   "score": 5.856437449607473,
-   "entry": 51.7,
-   "stop": 51.52,
-   "risk": 0.18,
-   "t1": 51.88,
-   "t2": 52.06,
-   "setup": "Reclaim 20-DMA",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "SLB Limited (SLB) Is a Trending Stock: Facts to Know Before Betting on It",
-     "pub": "Yahoo Finance",
-     "when": "Thu, 12 Nov 2026 13:00:03 +0000"
-    },
-    {
-     "title": "SLB Selected by Vår Energi for Integrated Drilling Services Offshore Norway",
-     "pub": "Yahoo Finance",
-     "when": "Thu, 12 Nov 2026 12:50:00 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "BAJFINANCE",
-   "market": "IN",
-   "price": 1117,
-   "prev": 1115,
-   "high": 1118,
-   "low": 1087.8499755859375,
-   "gap": -1.3452914798206317,
-   "chg": 0.17937219730941312,
-   "rvol": 1.1839325400530971,
-   "rsi": 71.9844945641174,
-   "setups": [
-    "20-Day Breakout",
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 1105.75,
-   "orl": 1091.75,
-   "orbHit": "09:30",
-   "atr5": 1.7071271623883928,
-   "date": "2026-11-13",
-   "notional": 13290310623,
-   "score": 8.23774419924592,
-   "entry": 1118.01,
-   "stop": 1114.59,
-   "risk": 3.42,
-   "t1": 1121.43,
-   "t2": 1124.85,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [],
-   "moving": false
-  },
-  {
-   "t": "PNB",
-   "market": "IN",
-   "price": 142.80999755859375,
-   "prev": 141.7899932861328,
-   "high": 145.13999938964844,
-   "low": 141.3699951171875,
-   "gap": -0.06347157215037535,
-   "chg": 0.7193767689956498,
-   "rvol": 2.016251448576372,
-   "rsi": 81.51984843372594,
-   "setups": [
-    "20-Day Breakout",
-    "ORB Breakout"
-   ],
-   "orh": 143.6699981689453,
-   "orl": 141.44000244140625,
-   "orbHit": "09:55",
-   "atr5": 0.2421449933733259,
-   "date": "2026-11-13",
-   "notional": 8745481745.911743,
-   "score": 7.232064479275067,
-   "entry": 145.15,
-   "stop": 144.66,
-   "risk": 0.49,
-   "t1": 145.64,
-   "t2": 146.13,
-   "setup": "20-Day Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "India's PNB hikes cybersecurity spend as AI models including Anthropic’s Mythos raise risks",
-     "pub": "Yahoo Finance",
-     "when": "Tue, 05 May 2026 14:37:17 +0000"
-    },
-    {
-     "title": "Punjab National Bank (BOM:532461) Q1 2027 Earnings Call Highlights: Strong Growth Amidst ...",
-     "pub": "Yahoo Finance",
-     "when": "Mon, 20 Jul 2026 01:00:38 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "DLF",
-   "market": "IN",
-   "price": 758.75,
-   "prev": 769.2999877929688,
-   "high": 769.5499877929688,
-   "low": 751.9500122070312,
-   "gap": -0.29897151039441905,
-   "chg": -1.3713750110974865,
-   "rvol": 1.021966402444745,
-   "rsi": 69.44209043002257,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 763.4500122070312,
-   "orl": 757.9500122070312,
-   "orbHit": "09:30",
-   "atr5": 1.7071533203125,
-   "date": "2026-11-13",
-   "notional": 2279513383.75,
-   "score": 6.021966402444745,
-   "entry": 769.56,
-   "stop": 766.14,
-   "risk": 3.42,
-   "t1": 772.98,
-   "t2": 776.4,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "DLF Ltd (BOM:532868) Q4 2026 Earnings Call Highlights: Record Collections and Strong Financial ...",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 15 May 2026 01:03:40 +0000"
-    },
-    {
-     "title": "DLF Ltd (BOM:532868) Q3 2026 Earnings Call Highlights: Record Growth and Strategic Developments",
-     "pub": "Yahoo Finance",
-     "when": "Fri, 23 Jan 2026 17:00:55 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "JSWSTEEL",
-   "market": "IN",
-   "price": 1348,
-   "prev": 1352.0999755859375,
-   "high": 1355.4000244140625,
-   "low": 1336.4000244140625,
-   "gap": -0.6656312523117824,
-   "chg": -0.303230209301697,
-   "rvol": 0.6844378007969915,
-   "rsi": 64.62661092429386,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 1349,
-   "orl": 1340.5999755859375,
-   "orbHit": "09:30",
-   "atr5": 1.9285714285714286,
-   "date": "2026-11-13",
-   "notional": 2172711792,
-   "score": 5.684437800796991,
-   "entry": 1355.41,
-   "stop": 1351.55,
-   "risk": 3.86,
-   "t1": 1359.27,
-   "t2": 1363.13,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [],
-   "moving": false
-  },
-  {
-   "t": "LT",
-   "market": "IN",
-   "price": 4143.7998046875,
-   "prev": 4159.2001953125,
-   "high": 4193.60009765625,
-   "low": 4127.60009765625,
-   "gap": -0.33900983348050806,
-   "chg": -0.37027288665634206,
-   "rvol": 0.6360664152183412,
-   "rsi": 70.24390474254405,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 4154,
-   "orl": 4130.39990234375,
-   "orbHit": "09:35",
-   "atr5": 4.378522600446429,
-   "date": "2026-11-13",
-   "notional": 6570802631.293945,
-   "score": 5.636066415218341,
-   "entry": 4193.61,
-   "stop": 4184.85,
-   "risk": 8.76,
-   "t1": 4202.37,
-   "t2": 4211.13,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "L&amp;T secures order for Noida Metro Aqua Line extension project",
-     "pub": "Yahoo Finance",
-     "when": "Wed, 11 Nov 2026 09:07:39 +0000"
-    },
-    {
-     "title": "Larsen &amp; Toubro Ltd (LTOUF) (Q2 2027) Earnings Call Highlights: Record INR1. ...",
-     "pub": "Yahoo Finance",
-     "when": "Sun, 01 Nov 2026 15:03:17 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "RELIANCE",
-   "market": "IN",
-   "price": 1339.699951171875,
-   "prev": 1339.699951171875,
-   "high": 1350.699951171875,
-   "low": 1324,
-   "gap": -0.23139327453328695,
-   "chg": 0,
-   "rvol": 0.6309949579747748,
-   "rsi": 70.82812145108,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 1333.4000244140625,
-   "orl": 1324.300048828125,
-   "orbHit": "10:00",
-   "atr5": 1.8285871233258928,
-   "date": "2026-11-13",
-   "notional": 18429243434.208252,
-   "score": 5.6309949579747745,
-   "entry": 1350.71,
-   "stop": 1347.05,
-   "risk": 3.66,
-   "t1": 1354.37,
-   "t2": 1358.03,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [],
-   "moving": false
-  },
-  {
-   "t": "VEDL",
-   "market": "IN",
-   "price": 259.67999267578125,
-   "prev": 260.3999938964844,
-   "high": 261.1199951171875,
-   "low": 256.1000061035156,
-   "gap": -0.9216566638778123,
-   "chg": -0.2764981711133818,
-   "rvol": 0.6042069106358511,
-   "rsi": 56.849537292245316,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 259.0299987792969,
-   "orl": 256.9700012207031,
-   "orbHit": "09:35",
-   "atr5": 0.517852783203125,
-   "date": "2026-11-13",
-   "notional": 1734188435.0875854,
-   "score": 5.604206910635851,
-   "entry": 261.13,
-   "stop": 260.09,
-   "risk": 1.04,
-   "t1": 262.17,
-   "t2": 263.21,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Vedanta Limited Delivers Highest-ever Half-yearly Profit of $1.21 bn, up 151% YoY",
-     "pub": "Yahoo Finance",
-     "when": "Tue, 03 Nov 2026 11:26:00 +0000"
-    },
-    {
-     "title": "Vedanta Ltd Doubles Zinc Capacity in South Africa with US$ 600 Mn investment",
-     "pub": "Yahoo Finance",
-     "when": "Mon, 19 Oct 2026 17:19:00 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "DRREDDY",
-   "market": "IN",
-   "price": 1380,
-   "prev": 1386.5999755859375,
-   "high": 1404,
-   "low": 1375.800048828125,
-   "gap": -0.47598266999453465,
-   "chg": -0.47598266999453465,
-   "rvol": 0.6031811861590218,
-   "rsi": 70.92918949198366,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 1394.9000244140625,
-   "orl": 1387.0999755859375,
-   "orbHit": "09:30",
-   "atr5": 2.157139369419643,
-   "date": "2026-11-13",
-   "notional": 1805162820,
-   "score": 5.603181186159022,
-   "entry": 1404.01,
-   "stop": 1399.69,
-   "risk": 4.32,
-   "t1": 1408.33,
-   "t2": 1412.65,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [],
-   "moving": false
-  },
-  {
-   "t": "GRASIM",
-   "market": "IN",
-   "price": 3034,
-   "prev": 3114.89990234375,
-   "high": 3125,
-   "low": 3009,
-   "gap": 0.32425111473566304,
-   "chg": -2.597191077725425,
-   "rvol": 2.58772957577441,
-   "rsi": 48.0507525325021,
-   "setups": [
-    "ORB Breakout"
-   ],
-   "orh": 3114.800048828125,
-   "orl": 3088.60009765625,
-   "orbHit": "09:40",
-   "atr5": 20.878574916294642,
-   "date": "2026-11-13",
-   "notional": 4581822406,
-   "score": 5.58772957577441,
-   "entry": 3125.01,
-   "stop": 3083.25,
-   "risk": 41.76,
-   "t1": 3166.77,
-   "t2": 3208.53,
-   "setup": "ORB Breakout",
-   "dir": "LONG",
-   "news": [
-    {
-     "title": "Grasim Industries Ltd (BOM:500300) (Q1 2027) Earnings Call Highlights: Record Revenue and ...",
-     "pub": "Yahoo Finance",
-     "when": "Wed, 12 Aug 2026 23:06:07 +0000"
-    },
-    {
-     "title": "Lubrizol and Grasim Inaugurate Advanced CPVC Resin Plant in Vilayat, Gujarat",
-     "pub": "Yahoo Finance",
-     "when": "Tue, 16 Jun 2026 14:53:00 +0000"
-    }
-   ],
-   "moving": false
-  },
-  {
-   "t": "TRENT",
-   "market": "IN",
-   "price": 3165.199951171875,
-   "prev": 3180,
-   "high": 3200,
-   "low": 3143.300048828125,
-   "gap": 0,
-   "chg": -0.4654103405070775,
-   "rvol": 0.5743934375202964,
-   "rsi": 65.92069693142781,
-   "setups": [
-    "Bull Flag",
-    "ORB Breakout"
-   ],
-   "orh": 3175.10009765625,
-   "orl": 3152,
-   "orbHit": "09:45",
-   "atr5": 5.121425083705357,
-   "date": "2026-11-13",
-   "notional": 1854506477.3913574,
-   "score": 5.574393437520296,
-   "entry": 3200.01,
-   "stop": 3189.76,
-   "risk": 10.25,
-   "t1": 3210.26,
-   "t2": 3220.51,
-   "setup": "Bull Flag",
-   "dir": "LONG",
-   "news": [],
-   "moving": false
-  }
- ]
-};
-const P=DATA.picks;let mkt='All',filter='All',sortK='score',sortD=-1;
+const DATA={"generated":"2026-11-14T16:16:46.357Z","session":"2026-11-13","sessionIN":"2026-11-13","scanned":198,"universe":222,"matched":255,"config":{"budget":10000,"cash_buffer_pct":10,"max_position_pct":75,"max_order_usd":8000,"min_price":5,"min_volume":1000000},"picks":[{"t":"U","market":"US","indices":[],"price":52.810001373291016,"prev":50.18000030517578,"high":52.88999938964844,"low":49.709999084472656,"gap":0.6377036526068247,"chg":5.241134021762783,"rvol":0.9337059965242187,"rsi":70.99669083208224,"atr5":0.16425977434430802,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"09:45","score":7.506046203053053,"entry":52.9,"stop":52.57,"risk":0.33,"t1":53.23,"t2":53.56,"setup":"20-Day Breakout","moving":true,"news":[{"title":"Unity (U) Stock Sees Fair Value Lift After Q3 Spurs Higher Analyst Targets","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:08:42 +0000"},{"title":"Is Unity Software (U) Near A Take Private Deal?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 15:11:36 +0000"}]},{"t":"KO","market":"US","indices":[],"price":99.25,"prev":97.44000244140625,"high":99.30000305175781,"low":97.95999908447266,"gap":0.7594394963347018,"chg":1.8575508140839414,"rvol":0.9721676060645782,"rsi":73.48383553309574,"atr5":0.09677178519112724,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"10:30","score":6.52943285028976,"entry":99.31,"stop":99.11,"risk":0.2,"t1":99.51,"t2":99.71,"setup":"20-Day Breakout","moving":false,"news":[{"title":"3 Consumer Compounders That Fit Warren Buffett's Playbook. I'd Hold Them Forever.","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:35:00 +0000"},{"title":"KO Stock Alert: Coca-Cola Just Hit a New All-Time High","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 21:05:06 +0000"}]},{"t":"META","market":"US","indices":[],"price":641.6900024414062,"prev":623.6099853515625,"high":643.9099731445312,"low":624.7899780273438,"gap":0.5772897653433473,"chg":2.899250735962977,"rvol":0.6293744698006346,"rsi":47.79424649268532,"atr5":1.2159075055803572,"date":"2026-11-13","dir":"LONG","setups":["Reclaim 20-DMA","ORB Breakout"],"orbHit":"09:50","score":6.499149690589528,"entry":643.92,"stop":641.48,"risk":2.44,"t1":646.36,"t2":648.8,"setup":"Reclaim 20-DMA","moving":false,"news":[{"title":"Italy fines Meta €805 million over access to Android users’ photos","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:29:55 +0000"},{"title":"Billionaire Bill Ackman Says There’s a Huge Disconnect in Wall Street’s Expectations for Amazon, Microsoft, Meta, and Alphabet","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:05:02 +0000"}]},{"t":"PEP","market":"US","indices":[],"price":145.44000244140625,"prev":142.25999450683594,"high":145.77999877929688,"low":142.52999877929688,"gap":0.3795926935002969,"chg":2.2353494006479124,"rvol":0.8244968948500727,"rsi":66.34435956103164,"atr5":0.17601449148995535,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"10:00","score":6.495101715044447,"entry":145.79,"stop":145.43,"risk":0.36,"t1":146.15,"t2":146.51,"setup":"20-Day Breakout","moving":false,"news":[{"title":"A $9.2 Billion Fund Dumps These 3 Stocks","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 16:06:51 +0000"},{"title":"Procter &amp; Gamble or PepsiCo: The One Dividend Stock I’d Hold for the Next 20 Years","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 14:17:32 +0000"}]},{"t":"COST","market":"US","indices":[],"price":1106.2099609375,"prev":1092.2099609375,"high":1109.5,"low":1092.6400146484375,"gap":0.21790726764381319,"chg":1.2818048269751303,"rvol":0.7866750898814383,"rsi":76.03356038984822,"atr5":0.9195120675223214,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"09:45","score":6.171216537973978,"entry":1109.51,"stop":1107.67,"risk":1.84,"t1":1111.35,"t2":1113.19,"setup":"20-Day Breakout","moving":false,"news":[{"title":"Walmart just took another step to beat Costco that could backfire","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:33:00 +0000"},{"title":"‘They’re Getting Insider Information From Costco Employees’: Inside the Pokemon Card Line Where Resellers Buy Executive Memberships","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 09:07:29 +0000"}]},{"t":"JNJ","market":"US","indices":[],"price":285.75,"prev":283.5199890136719,"high":288.1099853515625,"low":281.67999267578125,"gap":0.5220129245478988,"chg":0.7865445375072166,"rvol":0.8409115095245075,"rsi":65.62665184659406,"atr5":0.3080989292689732,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"10:30","score":6.076874870776672,"entry":288.12,"stop":287.5,"risk":0.62,"t1":288.74,"t2":289.36,"setup":"20-Day Breakout","moving":false,"news":[{"title":"Did Bipolar Drug Win Just Shift JNJ's Investment Narrative?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:08:45 +0000"},{"title":"Pfizer or Johnson &amp; Johnson: The One Dividend Stock I’d Hold for the Next 20 Years","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:39:22 +0000"}]},{"t":"LLY","market":"US","indices":[],"price":1443.5,"prev":1427.280029296875,"high":1449.6400146484375,"low":1419.77001953125,"gap":0.18426691530939454,"chg":1.1364252543430764,"rvol":0.6939707622810088,"rsi":69.72326923313327,"atr5":1.8875732421875,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"10:35","score":6.0348983385839325,"entry":1449.65,"stop":1445.87,"risk":3.78,"t1":1453.43,"t2":1457.21,"setup":"20-Day Breakout","moving":false,"news":[{"title":"Trump Touts Lilly’s “$3.5 Billion” Obesity Drug Plant, Its 10th New U.S. Site Since 2020","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 09:00:04 +0000"},{"title":"What Eli Lilly Doubters Overlooked","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 01:11:12 +0000"}]},{"t":"LOW","market":"US","indices":[],"price":227.72999572753906,"prev":227.4600067138672,"high":228.05999755859375,"low":223.6199951171875,"gap":-1.081511756465281,"chg":0.11869735588794228,"rvol":0.9377078383058266,"rsi":66.48003569945143,"atr5":0.2621361868722098,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"10:45","score":5.973317045072209,"entry":228.07,"stop":227.54,"risk":0.53,"t1":228.6,"t2":229.13,"setup":"Bull Flag","moving":false,"news":[{"title":"Lowe's (LOW) Stock Looks Fairly Valued Despite Its 21% Run","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:17:42 +0000"},{"title":"LOWE'S COMPANIES, INC. DECLARES CASH DIVIDEND","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 21:30:00 +0000"}]},{"t":"NOW","market":"US","indices":[],"price":102.25,"prev":100.66000366210938,"high":102.86000061035156,"low":99.69999694824219,"gap":1.5298959170537918,"chg":1.5795711107142951,"rvol":0.4193789741920631,"rsi":31.90899306929552,"atr5":0.17229843139648438,"date":"2026-11-13","dir":"LONG","setups":["Oversold Bounce","ORB Breakout"],"orbHit":"13:30","score":5.893250307406351,"entry":102.87,"stop":102.52,"risk":0.35,"t1":103.22,"t2":103.57,"setup":"Oversold Bounce","moving":false,"news":[{"title":"2 Stocks That Plunged on Oct. 29 to Buy and Hold Through 2030","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 09:01:02 +0000"},{"title":"ServiceNow (NOW) Trades 42% Below Its High. Here’s Why Argus Still Rates It a Buy","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 23:15:35 +0000"}]},{"t":"SLB","market":"US","indices":[],"price":51.66999816894531,"prev":50.90999984741211,"high":51.689998626708984,"low":50.880001068115234,"gap":1.0606971462302939,"chg":1.4928271927147518,"rvol":0.4085892917930464,"rsi":52.57965396411534,"atr5":0.08839552743094307,"date":"2026-11-13","dir":"LONG","setups":["Reclaim 20-DMA","ORB Breakout"],"orbHit":"15:55","score":5.856437449607473,"entry":51.7,"stop":51.52,"risk":0.18,"t1":51.88,"t2":52.06,"setup":"Reclaim 20-DMA","moving":false,"news":[{"title":"SLB Limited (SLB) Is a Trending Stock: Facts to Know Before Betting on It","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 13:00:03 +0000"},{"title":"SLB Selected by Vår Energi for Integrated Drilling Services Offshore Norway","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 12:50:00 +0000"}]},{"t":"BAC","market":"US","indices":[],"price":51.02000045776367,"prev":50.5099983215332,"high":51.04999923706055,"low":50.43000030517578,"gap":0.7523284116864426,"chg":1.0097053121719268,"rvol":0.5363622585227082,"rsi":45.90995741226263,"atr5":0.055064337594168525,"date":"2026-11-13","dir":"LONG","setups":["Reclaim 20-DMA","ORB Breakout"],"orbHit":"15:55","score":5.839273852174287,"entry":51.06,"stop":50.94,"risk":0.12,"t1":51.18,"t2":51.3,"setup":"Reclaim 20-DMA","moving":false,"news":[{"title":"Bank of America's $1.2B Treasury fine sparks investor class-action suit — What to do if you own stock","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 10:15:00 +0000"},{"title":"Bank of America resets AMD stock price target as Nvidia CEO exits","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:13:00 +0000"}]},{"t":"ABNB","market":"US","indices":[],"price":186.77999877929688,"prev":181.1300048828125,"high":187.02499389648438,"low":181.72000122070312,"gap":0.8474512018665337,"chg":3.11930312161135,"rvol":1.0721424089730072,"rsi":60.88383831947923,"atr5":0.33323451450892855,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"12:00","score":5.0079333454564114,"entry":187.03,"stop":186.36,"risk":0.67,"t1":187.7,"t2":188.37,"setup":"ORB Breakout","moving":true,"news":[{"title":"Advance Auto Parts vs. Airbnb: Is a Retail Rebound or Travel Giant Stock the Better Buy for 2027?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 23:32:02 +0000"},{"title":"EXPE vs. ABNB: Which Stock Is the Better Value Option?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 15:40:04 +0000"}]},{"t":"WDAY","market":"US","indices":[],"price":196.4499969482422,"prev":190.63999938964844,"high":196.66000366210938,"low":190.97000122070312,"gap":1.5946251027411096,"chg":3.0476277681467545,"rvol":0.8062180123037661,"rsi":51.451044365251,"atr5":0.35339137486049105,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"11:25","score":4.720506342747793,"entry":196.67,"stop":195.96,"risk":0.71,"t1":197.38,"t2":198.09,"setup":"ORB Breakout","moving":true,"news":[{"title":"Workday (WDAY) Deepens Its AI Push Through Two New Partnerships","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 06:11:24 +0000"},{"title":"Workday and The Josh Bersin Company Bring Galileo Agent to Workday Customers in Sana, Giving HR Leaders Instant Access to Trusted Expertise","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 14:05:00 +0000"}]},{"t":"UPST","market":"US","indices":[],"price":19.559999465942383,"prev":19.149999618530273,"high":19.905000686645508,"low":18.90999984741211,"gap":1.618796199047523,"chg":2.1409914129469687,"rvol":0.9842814153137209,"rsi":35.46289870853744,"atr5":0.06996372767857142,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"12:05","score":4.626578839197812,"entry":19.92,"stop":19.78,"risk":0.14,"t1":20.06,"t2":20.2,"setup":"ORB Breakout","moving":false,"news":[{"title":"SoFi vs. Upstart: Which Fintech Stock is the Better Buy Right Now?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:41:00 +0000"},{"title":"Investors Heavily Search Upstart Holdings, Inc. (UPST): Here is What You Need to Know","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 13:00:02 +0000"}]},{"t":"SCHW","market":"US","indices":[],"price":92.9800033569336,"prev":91.72000122070312,"high":93.05000305175781,"low":89.76000213623047,"gap":-0.6977751647739616,"chg":1.3737484948332712,"rvol":1.1391447972104973,"rsi":49.54231758198152,"atr5":0.17235783168247767,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"10:05","score":4.551269345660479,"entry":93.06,"stop":92.71,"risk":0.35,"t1":93.41,"t2":93.76,"setup":"ORB Breakout","moving":false,"news":[{"title":"Consumers find new ways to spend without selling positions","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 19:47:00 +0000"},{"title":"Finance Experts Reveal Lessons for Investors","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 15:57:35 +0000"}]},{"t":"BMY","market":"US","indices":[],"price":63.43000030517578,"prev":62.31999969482422,"high":63.790000915527344,"low":61.810001373291016,"gap":0.38511180943847645,"chg":1.781130641506956,"rvol":0.8968729993249687,"rsi":55.799216289594995,"atr5":0.1349996839250837,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"11:05","score":4.431212191777055,"entry":63.8,"stop":63.53,"risk":0.27,"t1":64.07,"t2":64.34,"setup":"ORB Breakout","moving":false,"news":[{"title":"How Many Shares of Pfizer, Merck or Bristol Myers Squibb Pay $1,000 a Month in Dividends?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:50:31 +0000"},{"title":"3 Defensive Dividend Stocks for Retirees Worried About the Next Market Downturn","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:20:19 +0000"}]},{"t":"CVX","market":"US","indices":[],"price":219.88999938964844,"prev":216.35000610351562,"high":219.91000366210938,"low":216.55999755859375,"gap":0.8920696192898703,"chg":1.6362344285948627,"rvol":0.9071384735132546,"rsi":52.012017821945996,"atr5":0.2505286080496652,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"10:30","score":4.398008802091713,"entry":219.92,"stop":219.41,"risk":0.51,"t1":220.43,"t2":220.94,"setup":"ORB Breakout","moving":false,"news":[{"title":"Top 3 Energy Stocks To Watch In November 2026","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 10:11:40 +0000"},{"title":"Chevron Bets $7B on Venezuela While Exxon Mobil Plays It Safe: One Has a Distinct Edge Now","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:45:15 +0000"}]},{"t":"COP","market":"US","indices":[],"price":142.27999877929688,"prev":140.05999755859375,"high":142.5800018310547,"low":140.49000549316406,"gap":1.0995348934499383,"chg":1.5850358841926981,"rvol":0.8311106799938542,"rsi":53.445685738372454,"atr5":0.18553706577845983,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"10:20","score":4.306621445251664,"entry":142.59,"stop":142.21,"risk":0.38,"t1":142.97,"t2":143.35,"setup":"ORB Breakout","moving":false,"news":[{"title":"A December Rate Hike Looks Likely: Buy These 3 Energy and Materials Dividend Stocks Before the Fed Moves","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:30:50 +0000"},{"title":"ConocoPhillips' Lower 48 and Willow Assets: Key to Long-Term Growth?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:11:00 +0000"}]},{"t":"LYFT","market":"US","indices":[],"price":16.979999542236328,"prev":16.610000610351562,"high":17.1299991607666,"low":16.56999969482422,"gap":0.24081280378631664,"chg":2.227567238343009,"rvol":0.5606985936593472,"rsi":51.79441500044513,"atr5":0.04232869829450335,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"10:45","score":4.22896876516225,"entry":17.14,"stop":17.05,"risk":0.09,"t1":17.23,"t2":17.32,"setup":"ORB Breakout","moving":false,"news":[{"title":"Form Energy Adds Meta and Tesla Veterans Lori Goler and Jon McNeill to Board as It Ramps Production for Commercial Growth","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 15:00:00 +0000"},{"title":"What Does Lyft (LYFT) Face In The DOJ's $53 Million Disability Lawsuit?","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 08:15:21 +0000"}]},{"t":"WMT","market":"US","indices":[],"price":128.08999633789062,"prev":126.19000244140625,"high":128.27000427246094,"low":126.22000122070312,"gap":0.4596197721205897,"chg":1.5056611932205977,"rvol":0.7548577831494504,"rsi":67.89147915063407,"atr5":0.14786529541015625,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:45","score":4.20655614111563,"entry":128.28,"stop":127.98,"risk":0.3,"t1":128.58,"t2":128.88,"setup":"ORB Breakout","moving":false,"news":[{"title":"Walmart just took another step to beat Costco that could backfire","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:33:00 +0000"},{"title":"How Digital Expansion At Walmart (WMT) Has Changed Its Investment Story","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 23:19:51 +0000"}]},{"t":"ADBE","market":"US","indices":[],"price":243.0800018310547,"prev":238.5399932861328,"high":243.77999877929688,"low":237.94000244140625,"gap":0.7587879887343218,"chg":1.9032483745717421,"rvol":0.6107755920310738,"rsi":47.42752748573913,"atr5":0.30800301688058035,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:45","score":4.181750104402596,"entry":243.79,"stop":243.17,"risk":0.62,"t1":244.41,"t2":245.03,"setup":"ORB Breakout","moving":false,"news":[{"title":"Is Trending Stock Adobe Inc. (ADBE) a Buy Now?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 13:00:05 +0000"},{"title":"Adobe And 2 More Undervalued Tech Stocks To Watch","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 02:12:50 +0000"}]},{"t":"TTD","market":"US","indices":[],"price":15.680000305175781,"prev":15.470000267028809,"high":16.094999313354492,"low":15.454000473022461,"gap":1.0342588535897868,"chg":1.3574662865038611,"rvol":0.6821175857886419,"rsi":68.45080290832598,"atr5":0.04822138377598354,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:50","score":4.089357471739801,"entry":16.1,"stop":16,"risk":0.1,"t1":16.2,"t2":16.3,"setup":"ORB Breakout","moving":false,"news":[{"title":"AppLovin vs. The Trade Desk: Which Is the Better Digital Advertising Stock to Buy Going Into 2027?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:37:49 +0000"},{"title":"Trade Desk (TTD) Stock Gets Fair Value Bump After Q3 Beat And Cost Cuts","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 11:12:49 +0000"}]},{"t":"MSFT","market":"US","indices":[],"price":523.8800048828125,"prev":523,"high":526.4199829101562,"low":513.8200073242188,"gap":-0.6214149139579295,"chg":0.16826097185707045,"rvol":0.9993615462882762,"rsi":48.82056777071017,"atr5":0.7821393694196429,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:45","score":4.049839837845397,"entry":526.43,"stop":524.86,"risk":1.57,"t1":528,"t2":529.57,"setup":"ORB Breakout","moving":false,"news":[{"title":"Billionaire Bill Ackman Says There’s a Huge Disconnect in Wall Street’s Expectations for Amazon, Microsoft, Meta, and Alphabet","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:05:02 +0000"},{"title":"Why the Microsoft Outage Came at the Worst Possible Time for the Stock","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:58:00 +0000"}]},{"t":"V","market":"US","indices":[],"price":425.760009765625,"prev":420.30999755859375,"high":427.4599914550781,"low":422.5899963378906,"gap":0.7994137395392897,"chg":1.2966648994047425,"rvol":0.6553418792858903,"rsi":62.902824318397016,"atr5":0.32873971121651785,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:55","score":4.044341349107313,"entry":427.47,"stop":426.81,"risk":0.66,"t1":428.13,"t2":428.79,"setup":"ORB Breakout","moving":false,"news":[{"title":"Card Networks Like Visa and Mastercard Don't Take Credit Losses. American Express Does. Here's Why That Matters for the Stock.","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 13:55:00 +0000"},{"title":"Visa (V) Stock Gets Fair Value Bump As Analysts Lift Targets On New Growth Areas","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 07:08:14 +0000"}]},{"t":"SNAP","market":"US","indices":[],"price":5.260000228881836,"prev":5.21999979019165,"high":5.34499979019165,"low":5.159999847412109,"gap":0.3831414124593202,"chg":0.7662919597304585,"rvol":0.8119667947811078,"rsi":43.26340441455221,"atr5":0.022200039454868863,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:50","score":4.0418543827002456,"entry":5.35,"stop":5.3,"risk":0.05,"t1":5.4,"t2":5.45,"setup":"ORB Breakout","moving":false,"news":[{"title":"Snap (SNAP) Settles Major Youth Addiction Lawsuits With 1,600 Claims Still Active","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 08:07:50 +0000"},{"title":"How Much Higher Can Snap Stock Go From Here?","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 19:32:12 +0000"}]},{"t":"ZS","market":"US","indices":[],"price":192.47000122070312,"prev":193.22000122070312,"high":197.42999267578125,"low":187.55999755859375,"gap":2.080532163887705,"chg":-0.38815857326454095,"rvol":0.6374611992871546,"rsi":35.640222669078256,"atr5":0.44232068743024555,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","Bear Flag","ORB Breakdown"],"orbHit":"10:15","score":7.753908771266517,"entry":187.55,"stop":188.44,"risk":0.89,"t1":186.66,"t2":185.77,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Atlassian vs. Zscaler: Which Technology Stock Is a Better Buy for 2027?","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 21:32:41 +0000"},{"title":"Zscaler's Cross-Selling Strategy: Can Data Security Lift Revenues?","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 16:08:00 +0000"}]},{"t":"NVDA","market":"US","indices":[],"price":162.85000610351562,"prev":166.19000244140625,"high":170,"low":158.38999938964844,"gap":2.2384025308710642,"chg":-2.009745645841854,"rvol":1.850394687956073,"rsi":24.854234559371875,"atr5":0.5428292410714286,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"10:00","score":7.4533183817086295,"entry":158.38,"stop":159.47,"risk":1.09,"t1":157.29,"t2":156.2,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Why the biggest risk for investors in 2027 isn't Nvidia — it's inflation","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 16:02:41 +0000"},{"title":"Big Shareholders and 3,000 Nvidia Employees Want Jensen Huang Back","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:49:58 +0000"}]},{"t":"RIVN","market":"US","indices":[],"price":12.180000305175781,"prev":12.800000190734863,"high":12.800000190734863,"low":12.149999618530273,"gap":0,"chg":-4.843749033752842,"rvol":0.9129468497545273,"rsi":40.20997567322398,"atr5":0.08645704814365932,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"10:10","score":7.36607155988038,"entry":12.14,"stop":12.32,"risk":0.18,"t1":11.96,"t2":11.78,"setup":"Lose 20-DMA","moving":true,"news":[{"title":"Rivian Automotive And 2 EV Stocks To Watch","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 12:10:03 +0000"},{"title":"Zero To Sixty: Tesla Winds Down Cybertruck, Pulls Model Y Variant While Rivian, Lucid Chase Volumes","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 00:45:56 +0000"}]},{"t":"HOOD","market":"US","indices":[],"price":77.86000061035156,"prev":81.3499984741211,"high":79.95999908447266,"low":76.61000061035156,"gap":-2.028274808639119,"chg":-4.290101941280011,"rvol":0.972649759624149,"rsi":33.23237211648717,"atr5":0.2178513663155692,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"10:00","score":7.259680342008153,"entry":76.6,"stop":77.04,"risk":0.44,"t1":76.16,"t2":75.72,"setup":"20-Day Breakdown","moving":true,"news":[{"title":"House Memo Targets Officials’ Prediction Market Bets","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 14:55:39 +0000"},{"title":"Supreme Court Agrees To Consider Robinhood's Request To Drop IPO Lawsuit","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 22:55:31 +0000"}]},{"t":"AMD","market":"US","indices":[],"price":534.0599975585938,"prev":585.2999877929688,"high":571.1400146484375,"low":520.010009765625,"gap":-3.1624825135264323,"chg":-8.754483393650691,"rvol":1.4740601342009014,"rsi":50.3558030972524,"atr5":2.5165012904575894,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"09:45","score":7.1004051522961085,"entry":520,"stop":525.04,"risk":5.04,"t1":514.96,"t2":509.92,"setup":"ORB Breakdown","moving":true,"news":[{"title":"AMD Just Crushed Nvidia by 32 Points After Scandal. Here’s How NVDA Can Come Back","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:41:51 +0000"},{"title":"AMD Just Beat Nvidia by the Widest Margin Since 1999","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:07:49 +0000"}]},{"t":"MARA","market":"US","indices":[],"price":6.989999771118164,"prev":7.199999809265137,"high":7.190000057220459,"low":6.650000095367432,"gap":-1.2499955296515264,"chg":-2.916667273751028,"rvol":1.0662742573718504,"rsi":42.48067555222749,"atr5":0.04281418664114816,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"09:55","score":6.941274439497159,"entry":6.64,"stop":6.73,"risk":0.09,"t1":6.55,"t2":6.46,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"Strategy Drops 6% as MSCI Confirms Index Removal; MARA and Riot Fall 5%","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 13:54:53 +0000"},{"title":"MARA Soars 11% in a Week on Its Buyback. Its AI Leases “Could Slip Into Next Year”","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 04:56:36 +0000"}]},{"t":"KLAC","market":"US","indices":[],"price":152.32000732421875,"prev":157.3000030517578,"high":156.4600067138672,"low":146.8000030517578,"gap":-1.4685298879706155,"chg":-3.165922206562477,"rvol":0.847169697532324,"rsi":44.88526797378649,"atr5":0.5691070556640625,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"09:45","score":6.796946359501067,"entry":146.79,"stop":147.93,"risk":1.14,"t1":145.65,"t2":144.51,"setup":"Lose 20-DMA","moving":true,"news":[{"title":"KLA (KLAC) Generates $1.34 Billion in Cash, What’s Next?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:27:16 +0000"},{"title":"How Low Can KLA Stock Go?","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 19:23:17 +0000"}]},{"t":"MSTR","market":"US","indices":[],"price":111.62000274658203,"prev":114.41000366210938,"high":113.08000183105469,"low":108.25,"gap":-2.0627572194835575,"chg":-2.4385987468081405,"rvol":0.9995011751243368,"rsi":32.56322868905319,"atr5":0.45357186453683035,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"10:20","score":6.731080799166779,"entry":108.24,"stop":109.15,"risk":0.91,"t1":107.33,"t2":106.42,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Strategy's Michael Saylor Says Bitcoin Is Now a Bipartisan Issue That Crosses Party Lines. Here's Why He's Right.","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 12:02:00 +0000"},{"title":"How Index Removal Will Impact Strategy Stock Investors","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 04:24:05 +0000"}]},{"t":"COIN","market":"US","indices":[],"price":127.6500015258789,"prev":130.6699981689453,"high":130.60000610351562,"low":125.37999725341797,"gap":-2.6019756436232555,"chg":-2.311162994861149,"rvol":0.9482241400908533,"rsi":32.42557548999727,"atr5":0.41118621826171875,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"10:20","score":6.641573038549198,"entry":125.37,"stop":126.2,"risk":0.83,"t1":124.54,"t2":123.71,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Wall Street Has Nearly Halved Its Coinbase Target. Cantor Fitzgerald Still Sees 57% Upside","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 09:30:18 +0000"},{"title":"Coinbase CEO Brian Armstrong Credits SEC, CFTC Chiefs For Ending ‘Turf Wars’ Over Stock Perps","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:11:49 +0000"}]},{"t":"QCOM","market":"US","indices":[],"price":172.47000122070312,"prev":177.13999938964844,"high":177.52999877929688,"low":167.1999969482422,"gap":-0.41775177583482925,"chg":-2.6363318194852714,"rvol":0.7519557639972017,"rsi":48.80143669260424,"atr5":0.5732073102678571,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"09:45","score":6.542855309842784,"entry":167.19,"stop":168.34,"risk":1.15,"t1":166.04,"t2":164.89,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"Qualcomm Is Cheap Enough to Hold Through 2030","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 11:40:02 +0000"},{"title":"Micron Technology vs. Qualcomm: Which Tech Stock Is the Better Buy for 2027?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 01:31:02 +0000"}]},{"t":"AFRM","market":"US","indices":[],"price":65.11000061035156,"prev":65.83999633789062,"high":67.52999877929688,"low":64.4800033569336,"gap":0.24301894138669677,"chg":-1.1087420536792347,"rvol":1.2077788898146733,"rsi":38.28159449622118,"atr5":0.18892887660435267,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"10:10","score":6.540401505918443,"entry":64.47,"stop":64.85,"risk":0.38,"t1":64.09,"t2":63.71,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Kevin Warsh Is Giving Marc Andreessen the Fed’s Microphone Before December’s Rate Decision","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 16:42:11 +0000"},{"title":"Bernstein names its top payments stock picks","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 08:14:30 +0000"}]},{"t":"RBLX","market":"US","indices":[],"price":49.90999984741211,"prev":51.41999816894531,"high":50.85499954223633,"low":49.5,"gap":-2.4115089613488516,"chg":-2.936597384877304,"rvol":0.535666625863145,"rsi":51.104864591826995,"atr5":0.1800283704485212,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"15:25","score":6.4166458413263365,"entry":49.49,"stop":49.86,"risk":0.37,"t1":49.12,"t2":48.75,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"Citi Just Downgraded Roblox Stock. Here's Why.","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 19:27:07 +0000"},{"title":"Is Citi Wrong to Give Up on Roblox? It Trades at 4.9x Sales, Below Its 5-Year Average","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:21:25 +0000"}]},{"t":"SNOW","market":"US","indices":[],"price":291,"prev":298.70001220703125,"high":301.6199951171875,"low":283.4100036621094,"gap":0.9775637063357046,"chg":-2.5778412763151515,"rvol":0.6387752034902083,"rsi":41.72691225231434,"atr5":0.600341796875,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:00","score":6.412127586384754,"entry":283.4,"stop":284.61,"risk":1.21,"t1":282.19,"t2":280.98,"setup":"Bear Flag","moving":false,"news":[{"title":"Snowflake Jumped 25% When AI Drove “Approximately Half of the Acceleration.” Can December 2 Repeat It?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:49:12 +0000"},{"title":"These 6 Data Software Stocks Help Companies Put AI to Work","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 08:33:02 +0000"}]},{"t":"TEAM","market":"US","indices":[],"price":149.99000549316406,"prev":152.2899932861328,"high":155.6300048828125,"low":148.58999633789062,"gap":1.2804598417490487,"chg":-1.5102684971870617,"rvol":0.8901626449927221,"rsi":28.012174700431515,"atr5":0.34357125418526785,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:35","score":6.343243194148841,"entry":148.58,"stop":149.27,"risk":0.69,"t1":147.89,"t2":147.2,"setup":"Bear Flag","moving":false,"news":[{"title":"Atlassian vs. Zscaler: Which Technology Stock Is a Better Buy for 2027?","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 21:32:41 +0000"},{"title":"Here’s Why Truist’s Miller Jump Cut His Target on Atlassian (TEAM) Despite a Buy Rating","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 18:01:49 +0000"}]},{"t":"CSCO","market":"US","indices":[],"price":95.63999938964844,"prev":102.01000213623047,"high":100.75,"low":95.26000213623047,"gap":-1.5096567819602003,"chg":-6.24448839641738,"rvol":1.4684033818440936,"rsi":37.06011853219988,"atr5":0.241943359375,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"09:45","score":6.341749900769308,"entry":95.25,"stop":95.74,"risk":0.49,"t1":94.76,"t2":94.27,"setup":"ORB Breakdown","moving":true,"news":[{"title":"Cisco Just Raised Its AI Forecast Again. Is it a Buy?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 13:11:01 +0000"},{"title":"Is Cisco Systems a Buy After Its Latest Earnings Report?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 08:20:02 +0000"}]},{"t":"PLTR","market":"US","indices":[],"price":167.99000549316406,"prev":171.5800018310547,"high":172.27999877929688,"low":164.75,"gap":0.09325309500050061,"chg":-2.092316295360286,"rvol":0.5945008980453064,"rsi":39.45684343056,"atr5":0.4000037057059152,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:00","score":6.222195786653392,"entry":164.74,"stop":165.55,"risk":0.81,"t1":163.93,"t2":163.12,"setup":"Bear Flag","moving":false,"news":[{"title":"PLTR's Rule of 40 Hits 158%: Can This Momentum Continue?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:40:00 +0000"},{"title":"The Same $10,000 in Nvidia and Palantir Could Produce Very Different Results by 2030","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:33:26 +0000"}]},{"t":"CRWD","market":"US","indices":[],"price":226.61000061035156,"prev":229.8699951171875,"high":236.1699981689453,"low":219.35499572753906,"gap":2.740680900326331,"chg":-1.41819053207618,"rvol":0.6833875032030994,"rsi":42.14161361008313,"atr5":0.564955575125558,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:00","score":6.108844662825954,"entry":219.34,"stop":220.47,"risk":1.13,"t1":218.21,"t2":217.08,"setup":"Bear Flag","moving":false,"news":[{"title":"CrowdStrike Doubles Down on AI Agents With $495 Million in Deals After a Record $333 Million ARR Quarter","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:43:16 +0000"},{"title":"Why CrowdStrike (CRWD), a Jim Cramer Holding, Wants Fiddler AI","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:38:14 +0000"}]},{"t":"SMCI","market":"US","indices":[],"price":26.8700008392334,"prev":26.989999771118164,"high":27.299999237060547,"low":25.889999389648438,"gap":0.3705090119220156,"chg":-0.4446051608091417,"rvol":0.9410859021096436,"rsi":36.1784539226888,"atr5":0.11014298030308314,"date":"2026-11-13","dir":"SHORT","setups":["20-Day Breakdown","ORB Breakdown"],"orbHit":"09:45","score":6.074467450352386,"entry":25.88,"stop":26.11,"risk":0.23,"t1":25.65,"t2":25.42,"setup":"20-Day Breakdown","moving":false,"news":[{"title":"Super Micro, run by Jensen Huang’s friend, says Megaspeed was ‘never’ its customer","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 23:48:45 +0000"},{"title":"Super Micro stock plunges, analyst sees 140% upside","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 17:16:42 +0000"}]},{"t":"GOOGL","market":"US","indices":[],"price":295.7699890136719,"prev":298.70001220703125,"high":304.9700012207031,"low":293.44000244140625,"gap":1.43287532788261,"chg":-0.9809250330155894,"rvol":0.7548383838296949,"rsi":40.57612047755512,"atr5":0.3731776646205357,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"09:45","score":6.049115893734371,"entry":293.43,"stop":294.18,"risk":0.75,"t1":292.68,"t2":291.93,"setup":"Bear Flag","moving":false,"news":[{"title":"Walmart, Target, and Nvidia Headline a Pivotal Week for Q3 Earnings","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 23:00:00 +0000"},{"title":"Anthropic’s $1.4 Trillion IPO Is Nov. 19. U.S. AI Giants Are Trouncing China 10-to-1","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 15:50:31 +0000"}]},{"t":"ORCL","market":"US","indices":[],"price":125.3499984741211,"prev":127.11000061035156,"high":128,"low":121.76000213623047,"gap":0.3068203821695814,"chg":-1.3846291619694417,"rvol":0.5292612527051479,"rsi":47.10831872402788,"atr5":0.28115081787109375,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"09:45","score":5.9446500012959795,"entry":121.75,"stop":122.32,"risk":0.57,"t1":121.18,"t2":120.61,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"Nvidia’s Interim CEO Pushed Back on a “$250 Billion Credit Backstop” for OpenAI. Oracle Has the Most at Stake","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 11:42:12 +0000"},{"title":"CoreWeave Jumped 20% and Pulled Oracle Higher. Is It Time to Sell, or Load Up?","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:33:57 +0000"}]},{"t":"PANW","market":"US","indices":[],"price":322.239990234375,"prev":322.6600036621094,"high":332,"low":314.8599853515625,"gap":2.432903370241135,"chg":-0.13017213877373202,"rvol":0.8450026574169907,"rsi":38.61967146858295,"atr5":0.6807011195591518,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:00","score":5.884054299049111,"entry":314.85,"stop":316.22,"risk":1.37,"t1":313.48,"t2":312.11,"setup":"Bear Flag","moving":false,"news":[{"title":"A Jim Cramer’s Trust Stock Is Using AI to Breaks the Defenses It Helps Protect","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:41:11 +0000"},{"title":"What Palo Alto Networks Stock Upgrade Means For Shareholders","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 19:09:36 +0000"}]},{"t":"CVS","market":"US","indices":[],"price":89.3499984741211,"prev":89.79000091552734,"high":89.91999816894531,"low":87.62999725341797,"gap":0.1002297995021717,"chg":-0.49003501160468366,"rvol":0.7307954996425575,"rsi":50.94521076264884,"atr5":0.13353565761021205,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"10:05","score":5.877806003123962,"entry":87.62,"stop":87.89,"risk":0.27,"t1":87.35,"t2":87.08,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"CVS Health (CVS) Could Be 28% Undervalued As Its Recovery Narrative Builds","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 10:09:38 +0000"},{"title":"CVS Health (CVS) Wins Seven Stevie Awards For AI And Technology","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:12:57 +0000"}]},{"t":"CAT","market":"US","indices":[],"price":600.2000122070312,"prev":605.280029296875,"high":611.9299926757812,"low":590.260009765625,"gap":1.098658977173117,"chg":-0.8392837767578376,"rvol":0.5935004363211064,"rsi":35.48964154954568,"atr5":0.8963492257254464,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"09:45","score":5.845285569348457,"entry":590.25,"stop":592.05,"risk":1.8,"t1":588.45,"t2":586.65,"setup":"Bear Flag","moving":false,"news":[{"title":"Kevin Simpson Is Buying More Caterpillar as an AI Trade That Isn’t Just AI","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 00:07:49 +0000"},{"title":"What Is Caterpillar (CAT) Signaling With Its Biggest Underground Mining Machine Yet?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 22:13:37 +0000"}]},{"t":"DDOG","market":"US","indices":[],"price":184.16000366210938,"prev":184.4600067138672,"high":188.44000244140625,"low":178.10000610351562,"gap":2.0492240278188634,"chg":-0.16263853455409372,"rvol":0.7394572292496316,"rsi":31.497997124613022,"atr5":0.48429107666015625,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:00","score":5.78824878961586,"entry":178.09,"stop":179.06,"risk":0.97,"t1":177.12,"t2":176.15,"setup":"Bear Flag","moving":false,"news":[{"title":"Are You Overpaying For Datadog Stock Versus Its Rivals?","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:31:37 +0000"},{"title":"Rocket Companies Appoints Datadog COO Adam Blitzer to Board of Directors","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 14:00:00 +0000"}]},{"t":"CRM","market":"US","indices":[],"price":217.83999633789062,"prev":217.57000732421875,"high":220,"low":215.5800018310547,"gap":1.116878519087483,"chg":0.1240929377134048,"rvol":0.7257989720184544,"rsi":39.49407777703827,"atr5":0.3346459524972098,"date":"2026-11-13","dir":"SHORT","setups":["Bear Flag","ORB Breakdown"],"orbHit":"10:40","score":5.725798972018454,"entry":215.57,"stop":216.24,"risk":0.67,"t1":214.9,"t2":214.23,"setup":"Bear Flag","moving":false,"news":[{"title":"Salesforce Buys Cresta 13 Days After Braze Because Voice Is “Hardest to Get Right”","pub":"Yahoo Finance","when":"Sat, 14 Nov 2026 05:38:39 +0000"},{"title":"This Jim Cramer’s Trust Holding Saw AI Assistant Usage Jump 21-Fold","pub":"Yahoo Finance","when":"Fri, 13 Nov 2026 20:40:03 +0000"}]},{"t":"POWERINDIA","market":"IN","indices":["nifty100"],"price":31595,"prev":28545,"high":32250,"low":29950,"gap":5.062182518829927,"chg":10.684883517253452,"rvol":5.750873693325911,"rsi":61.09964871483877,"atr5":102.14285714285714,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"09:30","score":13.956338748501945,"entry":32250.01,"stop":32045.72,"risk":204.29,"t1":32454.3,"t2":32658.59,"setup":"20-Day Breakout","moving":true,"news":[]},{"t":"BAJFINANCE","market":"IN","indices":["nifty50","nifty100"],"price":1117,"prev":1115,"high":1118,"low":1087.8499755859375,"gap":-1.3452914798206317,"chg":0.17937219730941312,"rvol":1.1839325400530971,"rsi":71.9844945641174,"atr5":1.7071271623883928,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","Bull Flag","ORB Breakout"],"orbHit":"09:30","score":8.23774419924592,"entry":1118.01,"stop":1114.59,"risk":3.42,"t1":1121.43,"t2":1124.85,"setup":"20-Day Breakout","moving":false,"news":[]},{"t":"BSE","market":"IN","indices":["nifty50","nifty100"],"price":3937.699951171875,"prev":3909.10009765625,"high":3955,"low":3875,"gap":-0.25837398388200983,"chg":0.731622439977242,"rvol":0.7878270618921464,"rsi":74.55527814877735,"atr5":5.992885044642857,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","Bull Flag","ORB Breakout"],"orbHit":"09:30","score":8.00731379388532,"entry":3955.01,"stop":3943.02,"risk":11.99,"t1":3967,"t2":3978.99,"setup":"20-Day Breakout","moving":false,"news":[{"title":"BSE Ltd (NSE:BSE) (Q2 2027) Earnings Call Highlights: Record IPO Haul and 53% Profit Surge","pub":"Yahoo Finance","when":"Fri, 06 Nov 2026 07:17:39 +0000"},{"title":"3 Financial Stocks Retail Investors May Watch After Nvidia Stock Fell 10%","pub":"Yahoo Finance","when":"Thu, 12 Nov 2026 16:14:47 +0000"}]},{"t":"MAXHEALTH","market":"IN","indices":["nifty50","nifty100"],"price":947.0999755859375,"prev":946.2999877929688,"high":953,"low":937.7000122070312,"gap":0.07397360414891363,"chg":0.08453849765279742,"rvol":0.3862233155903671,"rsi":62.310534852213266,"atr5":1.2285679408482142,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","Bull Flag","ORB Breakout"],"orbHit":"10:05","score":7.411584864886207,"entry":953.01,"stop":950.55,"risk":2.46,"t1":955.47,"t2":957.93,"setup":"20-Day Breakout","moving":false,"news":[]},{"t":"ENRIN","market":"IN","indices":["nifty100"],"price":3125.89990234375,"prev":3037.699951171875,"high":3222.300048828125,"low":3030.199951171875,"gap":0,"chg":2.903510965190925,"rvol":3.4757901571502754,"rsi":58.55984859903517,"atr5":10.492850167410714,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:30","score":7.3468434467075525,"entry":3222.31,"stop":3201.32,"risk":20.99,"t1":3243.3,"t2":3264.29,"setup":"ORB Breakout","moving":false,"news":[]},{"t":"ABB","market":"IN","indices":["nifty100"],"price":7054.5,"prev":6923,"high":7120,"low":6922,"gap":0.31055900621117516,"chg":1.8994655496172186,"rvol":1.6637482467982996,"rsi":58.41475642583917,"atr5":18.214285714285715,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"09:45","score":7.233587911683465,"entry":7120.01,"stop":7083.58,"risk":36.43,"t1":7156.44,"t2":7192.87,"setup":"20-Day Breakout","moving":false,"news":[]},{"t":"PNB","market":"IN","indices":["nifty100","banknifty"],"price":142.80999755859375,"prev":141.7899932861328,"high":145.13999938964844,"low":141.3699951171875,"gap":-0.06347157215037535,"chg":0.7193767689956498,"rvol":2.016251448576372,"rsi":81.51984843372594,"atr5":0.2421449933733259,"date":"2026-11-13","dir":"LONG","setups":["20-Day Breakout","ORB Breakout"],"orbHit":"09:55","score":7.232064479275067,"entry":145.15,"stop":144.66,"risk":0.49,"t1":145.64,"t2":146.13,"setup":"20-Day Breakout","moving":false,"news":[{"title":"India's PNB hikes cybersecurity spend as AI models including Anthropic’s Mythos raise risks","pub":"Yahoo Finance","when":"Tue, 05 May 2026 14:37:17 +0000"},{"title":"Punjab National Bank (BOM:532461) Q1 2027 Earnings Call Highlights: Strong Growth Amidst ...","pub":"Yahoo Finance","when":"Mon, 20 Jul 2026 01:00:38 +0000"}]},{"t":"CGPOWER","market":"IN","indices":["nifty100"],"price":828,"prev":821.75,"high":841.9000244140625,"low":821.0499877929688,"gap":0.22512632624733797,"chg":0.7605719501064812,"rvol":0.8876704940360562,"rsi":49.01510436821138,"atr5":1.399993896484375,"date":"2026-11-13","dir":"LONG","setups":["Reclaim 20-DMA","ORB Breakout"],"orbHit":"09:45","score":6.115842079068001,"entry":841.91,"stop":839.11,"risk":2.8,"t1":844.71,"t2":847.51,"setup":"Reclaim 20-DMA","moving":false,"news":[]},{"t":"HDFCAMC","market":"IN","indices":["nifty100"],"price":2663,"prev":2730,"high":2753.89990234375,"low":2657.5,"gap":0.36996694711537437,"chg":-2.4542124542124566,"rvol":1.0680777849082268,"rsi":66.6257837213416,"atr5":5.314278738839286,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:45","score":6.068077784908227,"entry":2753.91,"stop":2743.28,"risk":10.63,"t1":2764.54,"t2":2775.17,"setup":"Bull Flag","moving":false,"news":[]},{"t":"DLF","market":"IN","indices":["nifty100"],"price":758.75,"prev":769.2999877929688,"high":769.5499877929688,"low":751.9500122070312,"gap":-0.29897151039441905,"chg":-1.3713750110974865,"rvol":1.021966402444745,"rsi":69.44209043002257,"atr5":1.7071533203125,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:30","score":6.021966402444745,"entry":769.56,"stop":766.14,"risk":3.42,"t1":772.98,"t2":776.4,"setup":"Bull Flag","moving":false,"news":[{"title":"DLF Ltd (BOM:532868) Q4 2026 Earnings Call Highlights: Record Collections and Strong Financial ...","pub":"Yahoo Finance","when":"Fri, 15 May 2026 01:03:40 +0000"},{"title":"DLF Ltd (BOM:532868) Q3 2026 Earnings Call Highlights: Record Growth and Strategic Developments","pub":"Yahoo Finance","when":"Fri, 23 Jan 2026 17:00:55 +0000"}]},{"t":"CHOLAFIN","market":"IN","indices":["nifty100"],"price":1850,"prev":1862,"high":1858.9000244140625,"low":1809.5999755859375,"gap":-0.16648633651651368,"chg":-0.6444683136412444,"rvol":0.9897420060061046,"rsi":70.9663023787834,"atr5":5.114292689732143,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:45","score":5.989742006006105,"entry":1858.91,"stop":1848.68,"risk":10.23,"t1":1869.14,"t2":1879.37,"setup":"Bull Flag","moving":false,"news":[]},{"t":"TVSMOTOR","market":"IN","indices":["nifty100"],"price":4495,"prev":4500,"high":4502,"low":4431,"gap":-0.41999782986110734,"chg":-0.11111111111110628,"rvol":0.9866446587155837,"rsi":68.10989703930625,"atr5":7.757114955357143,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"10:50","score":5.9866446587155835,"entry":4502.01,"stop":4486.49,"risk":15.52,"t1":4517.53,"t2":4533.05,"setup":"Bull Flag","moving":false,"news":[]},{"t":"INDIGO","market":"IN","indices":["nifty50","nifty100"],"price":5587.2998046875,"prev":5660,"high":5626,"low":5543.39990234375,"gap":-0.6890459363957602,"chg":-1.2844557475706675,"rvol":0.9825086190135539,"rsi":72.6298271682655,"atr5":7.407087053571429,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:30","score":5.982508619013554,"entry":5626.01,"stop":5611.19,"risk":14.82,"t1":5640.83,"t2":5655.65,"setup":"Bull Flag","moving":false,"news":[{"title":"GE's Commercial Engines Segment Gains Momentum: Can It Sustain?","pub":"Yahoo Finance","when":"Tue, 03 Nov 2026 15:44:00 +0000"},{"title":"Indigo Surpasses $20 Million in Premiums and Increases Autonomous Underwriting to 40% of Submissions as AI-Driven Medical Malpractice Platform Scales","pub":"Yahoo Finance","when":"Tue, 29 Sep 2026 15:00:00 +0000"}]},{"t":"ADANIENSOL","market":"IN","indices":["nifty100"],"price":1438.5,"prev":1434.0999755859375,"high":1455.9000244140625,"low":1418,"gap":-0.37654448824993025,"chg":0.306814342721462,"rvol":0.7616334078356958,"rsi":58.80617477320838,"atr5":2.635707310267857,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:50","score":5.853677710652134,"entry":1455.91,"stop":1450.63,"risk":5.28,"t1":1461.19,"t2":1466.47,"setup":"Bull Flag","moving":false,"news":[]},{"t":"GAIL","market":"IN","indices":["nifty100"],"price":188,"prev":187.91000366210938,"high":188.8800048828125,"low":185.88999938964844,"gap":-0.14900685106704614,"chg":0.047893319214908914,"rvol":0.7855879989165483,"rsi":69.99254094238495,"atr5":0.20642961774553573,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:35","score":5.799955994681021,"entry":188.89,"stop":188.47,"risk":0.42,"t1":189.31,"t2":189.73,"setup":"Bull Flag","moving":false,"news":[{"title":"GAIL (India) Ltd (GAILF) (Q1 FY2027) Earnings Call Highlights: Record Profit Surge on LPG ...","pub":"Yahoo Finance","when":"Tue, 04 Aug 2026 01:04:07 +0000"},{"title":"GAIL (India) Ltd (GAILF) Q4 2026 Earnings Call Highlights: Navigating Challenges with Strategic ...","pub":"Yahoo Finance","when":"Wed, 27 May 2026 01:01:41 +0000"}]},{"t":"JSWSTEEL","market":"IN","indices":["nifty50","nifty100"],"price":1348,"prev":1352.0999755859375,"high":1355.4000244140625,"low":1336.4000244140625,"gap":-0.6656312523117824,"chg":-0.303230209301697,"rvol":0.6844378007969915,"rsi":64.62661092429386,"atr5":1.9285714285714286,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:30","score":5.684437800796991,"entry":1355.41,"stop":1351.55,"risk":3.86,"t1":1359.27,"t2":1363.13,"setup":"Bull Flag","moving":false,"news":[]},{"t":"LT","market":"IN","indices":["nifty50","nifty100"],"price":4143.7998046875,"prev":4159.2001953125,"high":4193.60009765625,"low":4127.60009765625,"gap":-0.33900983348050806,"chg":-0.37027288665634206,"rvol":0.6360664152183412,"rsi":70.24390474254405,"atr5":4.378522600446429,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:35","score":5.636066415218341,"entry":4193.61,"stop":4184.85,"risk":8.76,"t1":4202.37,"t2":4211.13,"setup":"Bull Flag","moving":false,"news":[{"title":"L&amp;T secures order for Noida Metro Aqua Line extension project","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 09:07:39 +0000"},{"title":"Larsen &amp; Toubro Ltd (LTOUF) (Q2 2027) Earnings Call Highlights: Record INR1. ...","pub":"Yahoo Finance","when":"Sun, 01 Nov 2026 15:03:17 +0000"}]},{"t":"RELIANCE","market":"IN","indices":["nifty50","nifty100"],"price":1339.699951171875,"prev":1339.699951171875,"high":1350.699951171875,"low":1324,"gap":-0.23139327453328695,"chg":0,"rvol":0.6309949579747748,"rsi":70.82812145108,"atr5":1.8285871233258928,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"10:00","score":5.6309949579747745,"entry":1350.71,"stop":1347.05,"risk":3.66,"t1":1354.37,"t2":1358.03,"setup":"Bull Flag","moving":false,"news":[]},{"t":"ADANIPOWER","market":"IN","indices":["nifty100"],"price":205.6699981689453,"prev":207.89999389648438,"high":207.7899932861328,"low":204.6199951171875,"gap":-0.7936478811567116,"chg":-1.0726290490654877,"rvol":0.6189124392359873,"rsi":59.51598091077547,"atr5":0.29785592215401785,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"11:30","score":5.618912439235987,"entry":207.8,"stop":207.2,"risk":0.6,"t1":208.4,"t2":209,"setup":"Bull Flag","moving":false,"news":[]},{"t":"VEDL","market":"IN","indices":["nifty100"],"price":259.67999267578125,"prev":260.3999938964844,"high":261.1199951171875,"low":256.1000061035156,"gap":-0.9216566638778123,"chg":-0.2764981711133818,"rvol":0.6042069106358511,"rsi":56.849537292245316,"atr5":0.517852783203125,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:35","score":5.604206910635851,"entry":261.13,"stop":260.09,"risk":1.04,"t1":262.17,"t2":263.21,"setup":"Bull Flag","moving":false,"news":[{"title":"Vedanta Limited Delivers Highest-ever Half-yearly Profit of $1.21 bn, up 151% YoY","pub":"Yahoo Finance","when":"Tue, 03 Nov 2026 11:26:00 +0000"},{"title":"Vedanta Ltd Doubles Zinc Capacity in South Africa with US$ 600 Mn investment","pub":"Yahoo Finance","when":"Mon, 19 Oct 2026 17:19:00 +0000"}]},{"t":"DRREDDY","market":"IN","indices":["nifty50","nifty100"],"price":1380,"prev":1386.5999755859375,"high":1404,"low":1375.800048828125,"gap":-0.47598266999453465,"chg":-0.47598266999453465,"rvol":0.6031811861590218,"rsi":70.92918949198366,"atr5":2.157139369419643,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:30","score":5.603181186159022,"entry":1404.01,"stop":1399.69,"risk":4.32,"t1":1408.33,"t2":1412.65,"setup":"Bull Flag","moving":false,"news":[]},{"t":"GRASIM","market":"IN","indices":["nifty50","nifty100"],"price":3034,"prev":3114.89990234375,"high":3125,"low":3009,"gap":0.32425111473566304,"chg":-2.597191077725425,"rvol":2.58772957577441,"rsi":48.0507525325021,"atr5":20.878574916294642,"date":"2026-11-13","dir":"LONG","setups":["ORB Breakout"],"orbHit":"09:40","score":5.58772957577441,"entry":3125.01,"stop":3083.25,"risk":41.76,"t1":3166.77,"t2":3208.53,"setup":"ORB Breakout","moving":false,"news":[{"title":"Grasim Industries Ltd (BOM:500300) (Q1 2027) Earnings Call Highlights: Record Revenue and ...","pub":"Yahoo Finance","when":"Wed, 12 Aug 2026 23:06:07 +0000"},{"title":"Lubrizol and Grasim Inaugurate Advanced CPVC Resin Plant in Vilayat, Gujarat","pub":"Yahoo Finance","when":"Tue, 16 Jun 2026 14:53:00 +0000"}]},{"t":"TRENT","market":"IN","indices":["nifty50","nifty100"],"price":3165.199951171875,"prev":3180,"high":3200,"low":3143.300048828125,"gap":0,"chg":-0.4654103405070775,"rvol":0.5743934375202964,"rsi":65.92069693142781,"atr5":5.121425083705357,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:45","score":5.574393437520296,"entry":3200.01,"stop":3189.76,"risk":10.25,"t1":3210.26,"t2":3220.51,"setup":"Bull Flag","moving":false,"news":[]},{"t":"TATACAP","market":"IN","indices":["nifty100"],"price":355.25,"prev":356.6499938964844,"high":357,"low":352,"gap":-1.3037975539217372,"chg":-0.3925400029281101,"rvol":0.5469833693828168,"rsi":64.13369744897597,"atr5":0.6392887660435268,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"09:45","score":5.546983369382817,"entry":357.01,"stop":355.73,"risk":1.28,"t1":358.29,"t2":359.57,"setup":"Bull Flag","moving":false,"news":[]},{"t":"JIOFIN","market":"IN","indices":["nifty50","nifty100"],"price":227.5,"prev":231.1999969482422,"high":229.39999389648438,"low":226.91000366210938,"gap":-0.8304490459725811,"chg":-1.6003447219207767,"rvol":0.5264245896280817,"rsi":59.31209741245598,"atr5":0.2935703822544643,"date":"2026-11-13","dir":"LONG","setups":["Bull Flag","ORB Breakout"],"orbHit":"10:00","score":5.526424589628082,"entry":229.41,"stop":228.82,"risk":0.59,"t1":230,"t2":230.59,"setup":"Bull Flag","moving":false,"news":[{"title":"Jio Financial targets 2026 launch for life, general insurance businesses","pub":"Yahoo Finance","when":"Mon, 30 Mar 2026 08:47:22 +0000"},{"title":"Bank of America to buy up to 49.9% stake in Jio Credit for $1.9B","pub":"Yahoo Finance","when":"Thu, 13 Aug 2026 12:16:55 +0000"}]},{"t":"TATAPOWER","market":"IN","indices":["nifty100"],"price":348,"prev":357,"high":357.1499938964844,"low":347.04998779296875,"gap":0,"chg":-2.5210084033613467,"rvol":1.9227502233222737,"rsi":45.555335831846854,"atr5":0.4678584507533482,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"10:25","score":7.6790527443306775,"entry":347.04,"stop":347.98,"risk":0.94,"t1":346.1,"t2":345.16,"setup":"Lose 20-DMA","moving":false,"news":[]},{"t":"HDFCAMC","market":"IN","indices":["nifty100"],"price":2663,"prev":2730,"high":2753.89990234375,"low":2657.5,"gap":0.36996694711537437,"chg":-2.4542124542124566,"rvol":1.0680777849082268,"rsi":66.6257837213416,"atr5":5.314278738839286,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"12:35","score":6.804341521171964,"entry":2657.49,"stop":2668.12,"risk":10.63,"t1":2646.86,"t2":2636.23,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"HDFCLIFE","market":"IN","indices":["nifty50","nifty100"],"price":592.25,"prev":597.7999877929688,"high":602.2999877929688,"low":587,"gap":0.7025781687512778,"chg":-0.9284021255100527,"rvol":1.157623823705295,"rsi":71.19330434484357,"atr5":0.967864990234375,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"09:30","score":6.436144461358311,"entry":586.99,"stop":588.93,"risk":1.94,"t1":585.05,"t2":583.11,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"DLF","market":"IN","indices":["nifty100"],"price":758.75,"prev":769.2999877929688,"high":769.5499877929688,"low":751.9500122070312,"gap":-0.29897151039441905,"chg":-1.3713750110974865,"rvol":1.021966402444745,"rsi":69.44209043002257,"atr5":1.7071533203125,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"13:40","score":6.433378905773991,"entry":751.94,"stop":755.36,"risk":3.42,"t1":748.52,"t2":745.1,"setup":"Overbought Rejection","moving":false,"news":[{"title":"DLF Ltd (BOM:532868) Q4 2026 Earnings Call Highlights: Record Collections and Strong Financial ...","pub":"Yahoo Finance","when":"Fri, 15 May 2026 01:03:40 +0000"},{"title":"DLF Ltd (BOM:532868) Q3 2026 Earnings Call Highlights: Record Growth and Strategic Developments","pub":"Yahoo Finance","when":"Fri, 23 Jan 2026 17:00:55 +0000"}]},{"t":"GRASIM","market":"IN","indices":["nifty50","nifty100"],"price":3034,"prev":3114.89990234375,"high":3125,"low":3009,"gap":0.32425111473566304,"chg":-2.597191077725425,"rvol":2.58772957577441,"rsi":48.0507525325021,"atr5":20.878574916294642,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"12:45","score":6.366886899092037,"entry":3008.99,"stop":3050.75,"risk":41.76,"t1":2967.23,"t2":2925.47,"setup":"ORB Breakdown","moving":false,"news":[{"title":"Grasim Industries Ltd (BOM:500300) (Q1 2027) Earnings Call Highlights: Record Revenue and ...","pub":"Yahoo Finance","when":"Wed, 12 Aug 2026 23:06:07 +0000"},{"title":"Lubrizol and Grasim Inaugurate Advanced CPVC Resin Plant in Vilayat, Gujarat","pub":"Yahoo Finance","when":"Tue, 16 Jun 2026 14:53:00 +0000"}]},{"t":"SBIN","market":"IN","indices":["nifty50","nifty100","banknifty"],"price":1080,"prev":1086.5,"high":1090.699951171875,"low":1074.1500244140625,"gap":0.3221352968246771,"chg":-0.5982512655315242,"rvol":1.1251027470068569,"rsi":72.28234621861051,"atr5":1.63214111328125,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"09:35","score":6.304578126666314,"entry":1074.14,"stop":1077.41,"risk":3.27,"t1":1070.87,"t2":1067.6,"setup":"Overbought Rejection","moving":false,"news":[{"title":"Standard Chartered and SBI back crypto insurance firm","pub":"Yahoo Finance","when":"Fri, 06 Nov 2026 21:08:46 +0000"},{"title":"State Bank of India (SBKFF) (Q2 2027) Earnings Call Highlights: Record Profit, Two-Decade-Low ...","pub":"Yahoo Finance","when":"Wed, 04 Nov 2026 07:03:44 +0000"}]},{"t":"UNIONBANK","market":"IN","indices":["nifty100","banknifty"],"price":203,"prev":204.39999389648438,"high":205.25,"low":201.25,"gap":-0.7387448884174863,"chg":-0.6849285412373285,"rvol":0.7455917871027108,"rsi":73.14026539928375,"atr5":0.3278568812779018,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"11:25","score":5.95107034947391,"entry":201.24,"stop":201.9,"risk":0.66,"t1":200.58,"t2":199.92,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"IOC","market":"IN","indices":["nifty100"],"price":144.0399932861328,"prev":146.1699981689453,"high":145.3800048828125,"low":143.24000549316406,"gap":-0.5404619935889476,"chg":-1.4572107200484519,"rvol":0.4364274980783788,"rsi":64.27724081458146,"atr5":0.18714250837053573,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"14:05","score":5.873590714092915,"entry":143.23,"stop":143.61,"risk":0.38,"t1":142.85,"t2":142.47,"setup":"Overbought Rejection","moving":false,"news":[{"title":"Indian Oil Corp Ltd (BOM:530965) (Q2 2027) Earnings Call Highlights: Record INR21,630 Crore ...","pub":"Yahoo Finance","when":"Tue, 03 Nov 2026 07:03:21 +0000"},{"title":"Indian Oil Corp Ltd (BOM:530965) Full Year 2026 Earnings Call Highlights: Record Profits and ...","pub":"Yahoo Finance","when":"Tue, 19 May 2026 17:00:26 +0000"}]},{"t":"ICICIBANK","market":"IN","indices":["nifty50","nifty100","banknifty"],"price":1583.5999755859375,"prev":1590,"high":1586,"low":1566.0999755859375,"gap":-0.8742153719536128,"chg":-0.40251725874607125,"rvol":0.643251048438614,"rsi":75.82588588705336,"atr5":2.135707310267857,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"11:45","score":5.764006226062436,"entry":1566.09,"stop":1570.37,"risk":4.28,"t1":1561.81,"t2":1557.53,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"DRREDDY","market":"IN","indices":["nifty50","nifty100"],"price":1380,"prev":1386.5999755859375,"high":1404,"low":1375.800048828125,"gap":-0.47598266999453465,"chg":-0.47598266999453465,"rvol":0.6031811861590218,"rsi":70.92918949198366,"atr5":2.157139369419643,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"12:05","score":5.745975987157382,"entry":1375.79,"stop":1380.11,"risk":4.32,"t1":1371.47,"t2":1367.15,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"DIVISLAB","market":"IN","indices":["nifty100"],"price":11442,"prev":11485,"high":11645.5,"low":11350.5,"gap":-0.6399651719634303,"chg":-0.3744013931214596,"rvol":0.6146219408897483,"rsi":78.71814440594667,"atr5":16,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"12:10","score":5.726942358826186,"entry":11350.49,"stop":11382.49,"risk":32,"t1":11318.49,"t2":11286.49,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"INFY","market":"IN","indices":["nifty50","nifty100"],"price":1141.5,"prev":1151.199951171875,"high":1155,"low":1135.5,"gap":-0.3213995247401291,"chg":-0.8425948213427903,"rvol":0.371673021627361,"rsi":52.589943511951525,"atr5":1.4214303152901786,"date":"2026-11-13","dir":"SHORT","setups":["Lose 20-DMA","ORB Breakdown"],"orbHit":"12:00","score":5.624451468030198,"entry":1135.49,"stop":1138.34,"risk":2.85,"t1":1132.64,"t2":1129.79,"setup":"Lose 20-DMA","moving":false,"news":[{"title":"Asian Equities Traded in the US as American Depositary Receipts Rise in Wednesday Trading","pub":"Yahoo Finance","when":"Wed, 11 Nov 2026 15:48:14 +0000"},{"title":"The Overlooked AI Trade Hiding in a Beaten-Down Corner of the Market","pub":"Yahoo Finance","when":"Tue, 10 Nov 2026 22:21:36 +0000"}]},{"t":"KOTAKBANK","market":"IN","indices":["nifty50","nifty100","banknifty"],"price":488.54998779296875,"prev":490.3999938964844,"high":490.3999938964844,"low":483.95001220703125,"gap":0,"chg":-0.37724431617879306,"rvol":0.4838834481328198,"rsi":73.98041937549506,"atr5":0.7321363176618304,"date":"2026-11-13","dir":"SHORT","setups":["Overbought Rejection","ORB Breakdown"],"orbHit":"10:25","score":5.597056742986458,"entry":483.94,"stop":485.41,"risk":1.47,"t1":482.47,"t2":481,"setup":"Overbought Rejection","moving":false,"news":[]},{"t":"TMCV","market":"IN","indices":["nifty100"],"price":433.54998779296875,"prev":453.3999938964844,"high":455,"low":431.1499938964844,"gap":0,"chg":-4.378034047359858,"rvol":0.9152517823821903,"rsi":55.27908981346449,"atr5":1.0500030517578125,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"10:00","score":5.228661996590148,"entry":431.14,"stop":433.25,"risk":2.11,"t1":429.03,"t2":426.92,"setup":"ORB Breakdown","moving":true,"news":[{"title":"Tata Motors and Iveco Group Come Together to Build for the Future Creating a New Global Force in Commercial Mobility","pub":"Yahoo Finance","when":"Tue, 03 Nov 2026 10:03:00 +0000"},{"title":"TATA MOTORS COMPLETES INITIAL SETTLEMENT OF RECOMMENDED TENDER OFFER FOR IVECO GROUP. IVECO GROUP HAS NOW BECOME PART OF TATA MOTORS, SUBSEQUENT CHANGES ARE ANNOUNCED","pub":"Yahoo Finance","when":"Fri, 30 Oct 2026 14:45:00 +0000"}]},{"t":"HINDALCO","market":"IN","indices":["nifty50","nifty100"],"price":943.5999755859375,"prev":964,"high":963,"low":941.5,"gap":-1.0373443983402453,"chg":-2.1161851051932024,"rvol":1.593453239015143,"rsi":54.79351495481561,"atr5":1.7321559361049108,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"12:05","score":5.228308770573104,"entry":941.49,"stop":944.96,"risk":3.47,"t1":938.02,"t2":934.55,"setup":"ORB Breakdown","moving":false,"news":[]},{"t":"TMPV","market":"IN","indices":["nifty50","nifty100"],"price":287.3999938964844,"prev":297.25,"high":297.29998779296875,"low":287.25,"gap":0,"chg":-3.3137110524863345,"rvol":1.2005270395107726,"rsi":52.460315948422384,"atr5":0.7999943324497768,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"11:45","score":5.194640355256673,"entry":287.24,"stop":288.84,"risk":1.6,"t1":285.64,"t2":284.04,"setup":"ORB Breakdown","moving":true,"news":[{"title":"Stellantis and Tata Motors target global markets with India-built vehicles","pub":"Yahoo Finance","when":"Tue, 13 Oct 2026 12:35:58 +0000"},{"title":"Tata Motors Q1 profit falls 80.2% despite revenue rise","pub":"Yahoo Finance","when":"Fri, 14 Aug 2026 11:30:35 +0000"}]},{"t":"SHRIRAMFIN","market":"IN","indices":["nifty50","nifty100"],"price":970,"prev":1003.7999877929688,"high":999,"low":965,"gap":-0.478181694694213,"chg":-3.367203447300693,"rvol":1.019460677976898,"rsi":56.64365972369502,"atr5":1.3928658621651786,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"11:50","score":5.029621712167106,"entry":964.99,"stop":967.78,"risk":2.79,"t1":962.2,"t2":959.41,"setup":"ORB Breakdown","moving":true,"news":[]},{"t":"PIDILITIND","market":"IN","indices":["nifty100"],"price":1525.699951171875,"prev":1579.699951171875,"high":1571,"low":1525.699951171875,"gap":-0.5507344078488519,"chg":-3.418370682352745,"rvol":0.928271469492187,"rsi":51.14440468375038,"atr5":3.335728236607143,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"10:50","score":4.953782674198011,"entry":1525.69,"stop":1532.37,"risk":6.68,"t1":1519.01,"t2":1512.33,"setup":"ORB Breakdown","moving":true,"news":[]},{"t":"MUTHOOTFIN","market":"IN","indices":["nifty100"],"price":2840,"prev":2932.89990234375,"high":2900,"low":2833.60009765625,"gap":-1.1217533308061078,"chg":-3.1675101584445975,"rvol":0.9342259876088524,"rsi":60.12506499674568,"atr5":4.17138671875,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"09:35","score":4.884479035142232,"entry":2833.59,"stop":2841.94,"risk":8.35,"t1":2825.24,"t2":2816.89,"setup":"ORB Breakdown","moving":true,"news":[]},{"t":"ADANIGREEN","market":"IN","indices":["nifty100"],"price":1403,"prev":1422,"high":1442,"low":1397.5,"gap":0.2742633202575506,"chg":-1.336146272855132,"rvol":1.4388515937075315,"rsi":58.9549891006831,"atr5":3.0571376255580356,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"10:30","score":4.8396954755640715,"entry":1397.49,"stop":1403.61,"risk":6.12,"t1":1391.37,"t2":1385.25,"setup":"ORB Breakdown","moving":false,"news":[]},{"t":"BPCL","market":"IN","indices":["nifty100"],"price":302,"prev":311.5,"high":308.5,"low":302,"gap":-1.0914908174909699,"chg":-3.04975922953451,"rvol":0.7161187751482113,"rsi":50.38713148954558,"atr5":0.39285496303013395,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"14:05","score":4.631046544008564,"entry":301.99,"stop":302.78,"risk":0.79,"t1":301.2,"t2":300.41,"setup":"ORB Breakdown","moving":true,"news":[{"title":"Indian Refiner BPCL Buys U.S. WTI Crude Oil Cargo","pub":"Yahoo Finance","when":"Tue, 03 Nov 2026 13:30:00 +0000"},{"title":"Eco Wave Power Announces Major Milestone in Collaboration with Fortune 500 Energy Giant Bharat Petroleum as First Purchase Order Is Issued for Wave Energy Project in India","pub":"Yahoo Finance","when":"Thu, 29 Oct 2026 12:30:00 +0000"}]},{"t":"IRFC","market":"IN","indices":["nifty100"],"price":83.30000305175781,"prev":85.29000091552734,"high":85.08000183105469,"low":82.9000015258789,"gap":-0.6917621772211113,"chg":-2.3332135565814593,"rvol":0.9151001144586376,"rsi":59.925411697706245,"atr5":0.13857051304408483,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"11:15","score":4.615064181433075,"entry":82.89,"stop":83.17,"risk":0.28,"t1":82.61,"t2":82.33,"setup":"ORB Breakdown","moving":false,"news":[{"title":"Indian Railway Finance Corp Ltd (BOM:543257) Q4 2026 Earnings Call Highlights: Record Revenue ...","pub":"Yahoo Finance","when":"Tue, 19 May 2026 01:02:50 +0000"},{"title":"Indian Railway Finance Corp Ltd (BOM:543257) (Q1 2027) Earnings Call Highlights: Record Revenue ...","pub":"Yahoo Finance","when":"Sat, 01 Aug 2026 01:05:57 +0000"}]},{"t":"INDUSINDBK","market":"IN","indices":["banknifty"],"price":914.4000244140625,"prev":931.3499755859375,"high":930,"low":911.3499755859375,"gap":-0.14494826019491036,"chg":-1.8199336034997238,"rvol":0.7635166848437411,"rsi":56.53938690919967,"atr5":1.0428553989955358,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"11:30","score":4.309496765893658,"entry":911.34,"stop":913.43,"risk":2.09,"t1":909.25,"t2":907.16,"setup":"ORB Breakdown","moving":false,"news":[]},{"t":"ADANIENT","market":"IN","indices":["nifty50","nifty100"],"price":2688,"prev":2741.5,"high":2750,"low":2677,"gap":-0.20062009848622608,"chg":-1.951486412547876,"rvol":0.711591419958054,"rsi":49.42811353749402,"atr5":3.4071219308035716,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"11:00","score":4.297037343722417,"entry":2676.99,"stop":2683.81,"risk":6.82,"t1":2670.17,"t2":2663.35,"setup":"ORB Breakdown","moving":false,"news":[]},{"t":"HAL","market":"IN","indices":["nifty100"],"price":4809.7998046875,"prev":4843.39990234375,"high":4884.39990234375,"low":4765,"gap":-0.008256645162763032,"chg":-0.6937295770268914,"rvol":1.0046762849912734,"rsi":45.556055888965915,"atr5":9.214250837053571,"date":"2026-11-13","dir":"SHORT","setups":["ORB Breakdown"],"orbHit":"12:45","score":4.212795158099341,"entry":4764.99,"stop":4783.42,"risk":18.43,"t1":4746.56,"t2":4728.13,"setup":"ORB Breakdown","moving":false,"news":[{"title":"Aitech Awarded $63M Contract for Avionics Computing Solutions to Power India's Light Combat Helicopter Program","pub":"Yahoo Finance","when":"Tue, 19 May 2026 05:00:00 +0000"},{"title":"Astra Microwave Products Ltd (BOM:532493) (Q1 2027) Earnings Call Highlights: Record Rs 4,300 ...","pub":"Yahoo Finance","when":"Thu, 13 Aug 2026 01:07:39 +0000"}]}]};
+const P=DATA.picks;let mkt='All',side='All',idx='All',filter='All',showAll=false,wonly=false,sortK='score',sortD=-1;
 const $=id=>document.getElementById(id), f=(x,d=2)=>Number(x).toFixed(d);
 const fm=(s,x,d=2)=>(s.market==='IN'?'₹':'$')+Number(x).toLocaleString(s.market==='IN'?'en-IN':'en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const mk=s=>s.market==='IN'?'NSE':'US';
+const IDXN={nifty50:'Nifty 50',nifty100:'Nifty 100',banknifty:'Bank Nifty'};
 const dec=x=>String(x).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-$('meta').textContent='Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid stocks, '+DATA.matched+' matched a rule, top 10 per market shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
-function calc(s){const a=+$(s.market==='IN'?'acctIN':'acct').value||0,rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
+const key=s=>s.market+':'+s.t+':'+s.dir;
+const today=()=>new Date().toLocaleDateString('en-CA');
+/* ---- browser storage (safe) ---- */
+function ld(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let watch=ld('ts_watch',[]),journal=ld('ts_journal',[]);
+['acct','acctIN','rpct','dpct'].forEach(i=>{const v=ld('ts_'+i,null);if(v!==null)$(i).value=v});
+/* ---- stale banner ---- */
+function staleBanner(){const h=(Date.now()-new Date(DATA.generated))/36e5;
+ const age=h<1?Math.round(h*60)+' min':h<48?f(h,1)+' hours':f(h/24,1)+' days';
+ const el=$('stale');el.className='stale'+(h>24?' old':'');
+ el.textContent=(h>24?'⚠ Data is '+age+' old. The scheduled refresh may have failed, so do not rely on these levels. ':'Data updated '+age+' ago ('+new Date(DATA.generated).toLocaleString()+'). ')+'Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' stocks, '+DATA.matched+' long/short matches.'}
+/* ---- market status ---- */
+function lt(tz){const p={};new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date()).forEach(x=>p[x.type]=x.value);
+ return {d:{Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0}[p.weekday],m:(+p.hour%24)*60+ +p.minute}}
+function dur(m){m=Math.round(m);const d=Math.floor(m/1440),h=Math.floor(m%1440/60),mi=m%60;return (d?d+'d ':'')+(h?h+'h ':'')+(d?'':mi+'m')}
+function mstat(name,tz,o,c){const t=lt(tz),wk=t.d>=1&&t.d<=5;
+ if(wk&&t.m>=o&&t.m<c)return '<span class="pill"><b>'+name+'</b> <span class="open">● OPEN</span> · closes in '+dur(c-t.m)+'</span>';
+ let add=0;if(wk&&t.m<o)add=o-t.m;else{let d=1,dd=(t.d+1)%7;while(dd<1||dd>5){d++;dd=(dd+1)%7}add=(1440-t.m)+(d-1)*1440+o}
+ return '<span class="pill"><b>'+name+'</b> <span class="closed">○ CLOSED</span> · opens in '+dur(add)+'</span>'}
+function statusBar(){$('status').innerHTML=mstat('NSE India','Asia/Kolkata',9*60+15,15*60+30)+mstat('US (NYSE/Nasdaq)','America/New_York',9*60+30,16*60)}
+/* ---- sizing ---- */
+function acctOf(m){return +$(m==='IN'?'acctIN':'acct').value||0}
+function calc(s){const a=acctOf(s.market),rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
  const lim={'max loss':rd/s.risk,'position cap':a*C.max_position_pct/100/s.entry,'max order':a*0.8/s.entry,'cash':a*(1-C.cash_buffer_pct/100)/s.entry};
  let q=Infinity,by='';for(const k in lim){const v=Math.floor(lim[k]);if(v<q){q=v;by=k}}q=Math.max(q,0);
  return Object.assign({},s,{qty:q,by:by,riskAmt:q*s.risk,pos:q*s.entry})}
-function plan(s){return 'LONG '+s.t+' ('+mk(s)+') - '+s.setups.join(' + ')+'\n'+
- 'Entry: buy above '+fm(s,s.entry)+' (break of last session high)\n'+
+function plan(s){const sh=s.dir==='SHORT';return s.dir+' '+s.t+' ('+mk(s)+(s.indices&&s.indices.length?', '+s.indices.map(i=>IDXN[i]).join('/'):'')+') - '+s.setups.join(' + ')+'\n'+
+ 'Entry: '+(sh?'sell short below ':'buy above ')+fm(s,s.entry)+' (break of last session '+(sh?'low':'high')+')\n'+
  'Stop-loss: '+fm(s,s.stop)+'\n'+
  'Target 1: '+fm(s,s.t1)+' (1R) | Target 2: '+fm(s,s.t2)+' (2R)\n'+
  'Qty: '+s.qty+' sh (~'+fm(s,s.pos,0)+', sized by '+s.by+') | Max loss at stop: '+fm(s,s.riskAmt,2)+'\n'+
@@ -884,33 +112,89 @@ function plan(s){return 'LONG '+s.t+' ('+mk(s)+') - '+s.setups.join(' + ')+'\n'+
 async function copy(i,btn){const t=plan(view()[i]);
  try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e2){}a.remove()}
  const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)}
+/* ---- journal ---- */
+const SYM=m=>m==='IN'?'₹':'$';
+const jstatus=j=>j.exit!==''&&j.exit!=null?'closed':(j.actual!==''&&j.actual!=null?'open':'planned');
+const jpnl=j=>{if(jstatus(j)!=='closed')return null;const e=(j.actual!==''&&j.actual!=null)?+j.actual:j.entry;return (j.dir==='LONG'?1:-1)*(+j.exit-e)*j.qty};
+function logTrade(s){const id=key(s)+'@'+today();if(journal.some(j=>j.id===id))return false;
+ journal.unshift({id:id,date:today(),t:s.t,market:s.market,dir:s.dir,setup:s.setups.join(' + '),entry:s.entry,stop:s.stop,t1:s.t1,t2:s.t2,qty:s.qty,risk:s.risk,actual:'',exit:''});sv('ts_journal',journal);return true}
+function riskUsed(m){let used=0;journal.forEach(j=>{if(j.market!==m||j.date!==today())return;const st=jstatus(j);
+ if(st!=='closed')used+=j.qty*j.risk;else{const p=jpnl(j);if(p<0)used+=-p}});return used}
+function renderRisk(){const dp=+$('dpct').value||0;let h='';
+ ['US','IN'].forEach(m=>{const lim=acctOf(m)*dp/100,used=riskUsed(m),pc=lim?Math.min(100,used/lim*100):0,over=used>lim&&lim>0;
+  h+='<div class="risk'+(over?' over':'')+'" style="display:inline-block;min-width:260px;margin-right:8px"><b>'+(m==='IN'?'India':'Foreign')+' today:</b> risk used '+SYM(m)+Number(used).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+' of '+SYM(m)+Number(lim).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+' limit'+(over?' <span class="over">· OVER LIMIT, stop trading today</span>':'')+'<div class="meter"><i style="width:'+pc+'%"></i></div></div>'});
+ $('riskbox').innerHTML=h}
+function renderJournal(){
+ $('jbody').innerHTML=journal.map((j,i)=>{const st=jstatus(j),p=jpnl(j);
+  return '<tr><td class="l">'+j.date+'</td><td class="l"><b>'+esc(j.t)+'</b> <span class="tag '+j.dir+'">'+j.dir+'</span> <small>'+(j.market==='IN'?'NSE':'US')+'</small></td>'+
+  '<td>'+SYM(j.market)+f(j.entry)+'</td><td class="neg">'+SYM(j.market)+f(j.stop)+'</td><td>'+SYM(j.market)+f(j.t1)+' / '+SYM(j.market)+f(j.t2)+'</td><td>'+j.qty+'</td>'+
+  '<td><input class="jin" data-j="'+i+'" data-f="actual" type="number" step="0.01" value="'+(j.actual===''?'':j.actual)+'" placeholder="fill price"></td>'+
+  '<td><input class="jin" data-j="'+i+'" data-f="exit" type="number" step="0.01" value="'+(j.exit===''?'':j.exit)+'" placeholder="exit price"></td>'+
+  '<td class="'+(p==null?'':p>=0?'pos':'neg')+'">'+(p==null?'–':(p>=0?'+':'−')+SYM(j.market)+Math.abs(p).toLocaleString(j.market==='IN'?'en-IN':'en-US',{maximumFractionDigits:2}))+'</td>'+
+  '<td class="l">'+st+'</td><td><button class="x" data-del="'+i+'" title="Delete">✕</button></td></tr>'}).join('')||'<tr><td class="l" colspan="11" style="color:var(--mut)">No trades logged yet. Use “Log trade” on a card to add one, then fill the actual entry and exit prices.</td></tr>';
+ let sum='';['US','IN'].forEach(m=>{const cl=journal.filter(j=>j.market===m&&jstatus(j)==='closed');if(!cl.length)return;
+  const w=cl.filter(j=>jpnl(j)>0).length,tot=cl.reduce((a,j)=>a+jpnl(j),0);
+  sum+='<span class="pill"><b>'+(m==='IN'?'India':'Foreign')+'</b> · '+cl.length+' closed · win rate '+Math.round(w/cl.length*100)+'% · net <span class="'+(tot>=0?'pos':'neg')+'">'+(tot>=0?'+':'−')+SYM(m)+Math.abs(tot).toLocaleString(m==='IN'?'en-IN':'en-US',{maximumFractionDigits:0})+'</span></span>'});
+ $('jsum').innerHTML=sum||'<span class="pill">Closed-trade stats appear here once you enter exit prices.</span>';
+ renderRisk()}
+/* ---- list / filters ---- */
 const cols=[['t','Ticker','l'],['dir','Side','l'],['price','Price'],['gap','Gap %'],['rvol','RVOL'],['setup','Setup','l'],['entry','Entry'],['stop','Stop'],['t1','T1'],['t2','T2'],['risk','R:R (T1/T2)'],['qty','Shares']];
-function view(){let v=P.map(calc);if(mkt!=='All')v=v.filter(s=>s.market===mkt);
+function base(){let v=P.map(calc);
+ if(mkt!=='All')v=v.filter(s=>s.market===mkt);
+ if(side!=='All')v=v.filter(s=>s.dir===side);
+ if(idx!=='All')v=v.filter(s=>s.indices&&s.indices.indexOf(idx)>-1);
+ if(wonly)v=v.filter(s=>watch.indexOf(key(s))>-1);
+ return v}
+function view(){let v=base();
  if(filter!=='All')v=v.filter(s=>s.setups.indexOf(filter)>-1);
- return v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD)}
+ v.sort((a,b)=>b.score-a.score);
+ if(!showAll&&!wonly){const n={};v=v.filter(s=>{const k=s.market+s.dir;n[k]=(n[k]||0)+1;return n[k]<=10||watch.indexOf(key(s))>-1})}
+ v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
+ return v.sort((a,b)=>(watch.indexOf(key(b))>-1)-(watch.indexOf(key(a))>-1))}
+function chipRow(el,list,cur,attr){$(el).innerHTML=list.map(m=>'<button class="chip '+(m[0]===cur?'on':'')+'" data-'+attr+'="'+esc(m[0])+'">'+esc(m[1])+'</button>').join(' ')}
+const starBtn=s=>'<button class="star '+(watch.indexOf(key(s))>-1?'on':'')+'" data-star="'+esc(key(s))+'" title="Watchlist">'+(watch.indexOf(key(s))>-1?'★':'☆')+'</button>';
 function render(){
- const MK=[['All','All markets'],['IN','Indian stocks'],['US','Foreign (US) stocks']];
- $('mkts').innerHTML=MK.map(m=>'<button class="chip '+(m[0]===mkt?'on':'')+'" data-m="'+m[0]+'">'+m[1]+'</button>').join(' ');
- const sets=['All'].concat(Array.from(new Set([].concat.apply([],P.filter(s=>mkt==='All'||s.market===mkt).map(s=>s.setups)))));
- $('chips').innerHTML=sets.map(s=>'<button class="chip '+(s===filter?'on':'')+'" data-f="'+esc(s)+'">'+esc(s)+'</button>').join(' ');
- const v=view();
- $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+esc(s.t)+' <small class="px">'+mk(s)+'</small></span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
+ if(mkt!=='IN')idx='All';
+ chipRow('mkts',[['All','All markets'],['IN','Indian stocks'],['US','Foreign (US) stocks']],mkt,'m');
+ chipRow('sides',[['All','Long + Short'],['LONG','Long'],['SHORT','Short']],side,'s');
+ $('idxbar').style.display=mkt==='IN'?'flex':'none';
+ chipRow('idxs',[['All','All Indian'],['nifty50','Nifty 50'],['nifty100','Nifty 100'],['banknifty','Bank Nifty']],idx,'i');
+ const sets=['All'].concat(Array.from(new Set([].concat.apply([],base().map(s=>s.setups)))));
+ if(sets.indexOf(filter)<0)filter='All';
+ chipRow('chips',sets.map(s=>[s,s]),filter,'f');
+ $('wonly').className='chip'+(wonly?' on':'');$('wonly').textContent='★ Watchlist ('+watch.length+')';
+ const v=view(),total=base().filter(s=>filter==='All'||s.setups.indexOf(filter)>-1).length;
+ $('count').textContent='Showing '+v.length+' of '+total;
+ $('more').style.display=(total>v.length||showAll)&&!wonly?'inline-block':'none';$('more').textContent=showAll?'Show top 10 only':'Show all '+total;
+ $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+esc(s.t)+' <small class="px">'+mk(s)+'</small>'+starBtn(s)+'</span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
  '<div class="px">'+fm(s,s.price)+' · gap <span class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</span> · RVOL '+f(s.rvol)+'×'+(s.moving?' · <b class="neg">MOVING</b>':'')+'</div>'+
+ (s.indices&&s.indices.length?'<div class="px">'+esc(s.indices.map(i=>IDXN[i]).join(' · '))+'</div>':'')+
  '<div class="setup">'+esc(s.setups.join(' + '))+(s.orbHit?' <span class="px">(ORB '+s.orbHit+')</span>':'')+'</div><div class="news">'+(s.news&&s.news[0]&&s.news[0].title?esc(dec(s.news[0].title))+' <i>('+esc(s.news[0].pub||'')+')</i>':'No headline found')+'</div>'+
- '<div class="g"><div><b>Entry (buy above)</b><span>'+fm(s,s.entry)+'</span></div><div><b>Stop</b><span class="sl">'+fm(s,s.stop)+'</span></div>'+
+ '<div class="g"><div><b>Entry ('+(s.dir==='SHORT'?'sell below':'buy above')+')</b><span>'+fm(s,s.entry)+'</span></div><div><b>Stop</b><span class="sl">'+fm(s,s.stop)+'</span></div>'+
  '<div><b>Target 1 (1R)</b><span class="tg">'+fm(s,s.t1)+'</span></div><div><b>Target 2 (2R)</b><span class="tg">'+fm(s,s.t2)+'</span></div>'+
  '<div><b>R:R (T1 / T2)</b><span>1 / 2</span></div><div><b>Shares</b><span>'+s.qty+'</span> <small class="px">'+s.by+'</small></div></div>'+
- '<button class="copy" data-c="'+i+'">Copy Trade Plan</button></div>').join('')||'<div class="px">No setups match this filter.</div>';
- $('head').innerHTML=cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
- $('body').innerHTML=v.map(s=>'<tr><td class="l"><b>'+esc(s.t)+'</b> <small>'+mk(s)+'</small></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>'+fm(s,s.price)+'</td>'+
+ '<div class="btns"><button class="copy" data-c="'+i+'">Copy Trade Plan</button><button class="log" data-l="'+i+'">'+(journal.some(j=>j.id===key(s)+'@'+today())?'Logged ✓':'Log trade')+'</button></div></div>').join('')||'<div class="px">No setups match this filter.</div>';
+ $('head').innerHTML='<th class="l"></th>'+cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
+ $('body').innerHTML=v.map(s=>'<tr><td class="l">'+starBtn(s)+'</td><td class="l"><b>'+esc(s.t)+'</b> <small>'+mk(s)+'</small></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>'+fm(s,s.price)+'</td>'+
  '<td class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</td><td>'+f(s.rvol)+'×</td><td class="l">'+esc(s.setups.join(' + '))+'</td><td>'+fm(s,s.entry)+'</td><td class="neg">'+fm(s,s.stop)+'</td>'+
- '<td class="pos">'+fm(s,s.t1)+'</td><td class="pos">'+fm(s,s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('')}
+ '<td class="pos">'+fm(s,s.t1)+'</td><td class="pos">'+fm(s,s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('');
+ renderJournal()}
 document.addEventListener('click',e=>{const t=e.target;
- if(t.dataset.m){mkt=t.dataset.m;filter='All';render()}
- else if(t.dataset.f){filter=t.dataset.f;render()}
+ if(t.dataset.m){mkt=t.dataset.m;idx='All';filter='All';render()}
+ else if(t.dataset.s){side=t.dataset.s;filter='All';render()}
+ else if(t.dataset.i){idx=t.dataset.i;filter='All';render()}
+ else if(t.dataset.f&&t.classList.contains('chip')){filter=t.dataset.f;render()}
+ else if(t.id==='more'){showAll=!showAll;render()}
+ else if(t.id==='wonly'){wonly=!wonly;render()}
+ else if(t.dataset.star){const k=t.dataset.star,n=watch.indexOf(k);n>-1?watch.splice(n,1):watch.push(k);sv('ts_watch',watch);render()}
  else if(t.dataset.k){const k=t.dataset.k;sortD=sortK===k?-sortD:(['t','dir','setup'].includes(k)?1:-1);sortK=k;render()}
+ else if(t.dataset.l!==undefined){logTrade(view()[+t.dataset.l]);render()}
+ else if(t.dataset.del!==undefined){journal.splice(+t.dataset.del,1);sv('ts_journal',journal);renderJournal()}
  else if(t.dataset.c!==undefined)copy(+t.dataset.c,t)});
-['acct','acctIN','rpct'].forEach(i=>$(i).addEventListener('input',render));
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.j===undefined)return;
+ journal[+t.dataset.j][t.dataset.f]=t.value===''?'':+t.value;sv('ts_journal',journal);renderJournal()});
+['acct','acctIN','rpct','dpct'].forEach(i=>$(i).addEventListener('input',()=>{sv('ts_'+i,$(i).value);render()}));
+staleBanner();statusBar();setInterval(()=>{statusBar();staleBanner()},30000);
 render();
 </script>
 </body></html>
