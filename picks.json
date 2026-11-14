@@ -1,0 +1,428 @@
+{
+ "generated": "2026-11-14T15:37:30.437Z",
+ "session": "2026-11-13",
+ "sessionIN": "2026-11-13",
+ "scanned": 159,
+ "universe": 172,
+ "matched": 82,
+ "config": {
+  "budget": 10000,
+  "maxLoss": 100,
+  "cash_buffer_pct": 10,
+  "max_position_pct": 75,
+  "max_order_usd": 8000,
+  "min_price": 5,
+  "min_volume": 1000000
+ },
+ "picks": [
+  {
+   "t": "U",
+   "market": "US",
+   "price": 52.810001373291016,
+   "prev": 50.18000030517578,
+   "high": 52.88999938964844,
+   "low": 49.709999084472656,
+   "gap": 0.6377036526068247,
+   "chg": 5.241134021762783,
+   "rvol": 0.9337059965242187,
+   "rsi": 70.99669083208224,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 51.040000915527344,
+   "orl": 49.74599838256836,
+   "orbHit": "09:45",
+   "atr5": 0.16425977434430802,
+   "date": "2026-11-13",
+   "notional": 646051151.8001556,
+   "score": 7.506046203053053,
+   "entry": 52.9,
+   "stop": 52.57,
+   "risk": 0.33,
+   "t1": 53.23,
+   "t2": 53.56,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Unity (U) Stock Sees Fair Value Lift After Q3 Spurs Higher Analyst Targets",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 20:08:42 +0000"
+    },
+    {
+     "title": "Is Unity Software (U) Near A Take Private Deal?",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 15:11:36 +0000"
+    }
+   ],
+   "moving": true
+  },
+  {
+   "t": "KO",
+   "market": "US",
+   "price": 99.25,
+   "prev": 97.44000244140625,
+   "high": 99.30000305175781,
+   "low": 97.95999908447266,
+   "gap": 0.7594394963347018,
+   "chg": 1.8575508140839414,
+   "rvol": 0.9721676060645782,
+   "rsi": 73.48383553309574,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 98.82499694824219,
+   "orl": 97.95999908447266,
+   "orbHit": "10:30",
+   "atr5": 0.09677178519112724,
+   "date": "2026-11-13",
+   "notional": 1788733125,
+   "score": 6.52943285028976,
+   "entry": 99.31,
+   "stop": 99.11,
+   "risk": 0.2,
+   "t1": 99.51,
+   "t2": 99.71,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "3 Consumer Compounders That Fit Warren Buffett's Playbook. I'd Hold Them Forever.",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 14:35:00 +0000"
+    },
+    {
+     "title": "KO Stock Alert: Coca-Cola Just Hit a New All-Time High",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 21:05:06 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "META",
+   "market": "US",
+   "price": 641.6900024414062,
+   "prev": 623.6099853515625,
+   "high": 643.9099731445312,
+   "low": 624.7899780273438,
+   "gap": 0.5772897653433473,
+   "chg": 2.899250735962977,
+   "rvol": 0.6293744698006346,
+   "rsi": 47.79424649268532,
+   "setups": [
+    "Reclaim 20-DMA",
+    "ORB Breakout"
+   ],
+   "orh": 634.9400024414062,
+   "orl": 625,
+   "orbHit": "09:50",
+   "atr5": 1.2159075055803572,
+   "date": "2026-11-13",
+   "notional": 9707165511.932373,
+   "score": 6.499149690589528,
+   "entry": 643.92,
+   "stop": 641.48,
+   "risk": 2.44,
+   "t1": 646.36,
+   "t2": 648.8,
+   "setup": "Reclaim 20-DMA",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Billionaire Bill Ackman Says There’s a Huge Disconnect in Wall Street’s Expectations for Amazon, Microsoft, Meta, and Alphabet",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 15:05:02 +0000"
+    },
+    {
+     "title": "Jamie Dimon Just Said 5 Words Blocking Outside AI Agents From JPMorgan Accounts: \"You Don't Want Rogue Agents.\" Here's Why That Security Stance Matters for JPM and Its Tech Rivals.",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 12:54:00 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "PEP",
+   "market": "US",
+   "price": 145.44000244140625,
+   "prev": 142.25999450683594,
+   "high": 145.77999877929688,
+   "low": 142.52999877929688,
+   "gap": 0.3795926935002969,
+   "chg": 2.2353494006479124,
+   "rvol": 0.8244968948500727,
+   "rsi": 66.34435956103164,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 144.16000366210938,
+   "orl": 142.52999877929688,
+   "orbHit": "10:00",
+   "atr5": 0.17601449148995535,
+   "date": "2026-11-13",
+   "notional": 1150721299.3164062,
+   "score": 6.495101715044447,
+   "entry": 145.79,
+   "stop": 145.43,
+   "risk": 0.36,
+   "t1": 146.15,
+   "t2": 146.51,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "A $9.2 Billion Fund Dumps These 3 Stocks",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 16:06:51 +0000"
+    },
+    {
+     "title": "Procter &amp; Gamble or PepsiCo: The One Dividend Stock I’d Hold for the Next 20 Years",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 14:17:32 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "COST",
+   "market": "US",
+   "price": 1106.2099609375,
+   "prev": 1092.2099609375,
+   "high": 1109.5,
+   "low": 1092.6400146484375,
+   "gap": 0.21790726764381319,
+   "chg": 1.2818048269751303,
+   "rvol": 0.7866750898814383,
+   "rsi": 76.03356038984822,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 1105.219970703125,
+   "orl": 1092.6400146484375,
+   "orbHit": "09:45",
+   "atr5": 0.9195120675223214,
+   "date": "2026-11-13",
+   "notional": 2073148087.7929688,
+   "score": 6.171216537973978,
+   "entry": 1109.51,
+   "stop": 1107.67,
+   "risk": 1.84,
+   "t1": 1111.35,
+   "t2": 1113.19,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Walmart just took another step to beat Costco that could backfire",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 14:33:00 +0000"
+    },
+    {
+     "title": "‘They’re Getting Insider Information From Costco Employees’: Inside the Pokemon Card Line Where Resellers Buy Executive Memberships",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 09:07:29 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "BAJFINANCE",
+   "market": "IN",
+   "price": 1117,
+   "prev": 1115,
+   "high": 1118,
+   "low": 1087.8499755859375,
+   "gap": -1.3452914798206317,
+   "chg": 0.17937219730941312,
+   "rvol": 1.1839325400530971,
+   "rsi": 71.9844945641174,
+   "setups": [
+    "20-Day Breakout",
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 1105.75,
+   "orl": 1091.75,
+   "orbHit": "09:30",
+   "atr5": 1.7071271623883928,
+   "date": "2026-11-13",
+   "notional": 13290310623,
+   "score": 8.23774419924592,
+   "entry": 1118.01,
+   "stop": 1114.59,
+   "risk": 3.42,
+   "t1": 1121.43,
+   "t2": 1124.85,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [],
+   "moving": false
+  },
+  {
+   "t": "PNB",
+   "market": "IN",
+   "price": 142.80999755859375,
+   "prev": 141.7899932861328,
+   "high": 145.13999938964844,
+   "low": 141.3699951171875,
+   "gap": -0.06347157215037535,
+   "chg": 0.7193767689956498,
+   "rvol": 2.016251448576372,
+   "rsi": 81.51984843372594,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 143.6699981689453,
+   "orl": 141.44000244140625,
+   "orbHit": "09:55",
+   "atr5": 0.2421449933733259,
+   "date": "2026-11-13",
+   "notional": 8745481745.911743,
+   "score": 7.232064479275067,
+   "entry": 145.15,
+   "stop": 144.66,
+   "risk": 0.49,
+   "t1": 145.64,
+   "t2": 146.13,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "India's PNB hikes cybersecurity spend as AI models including Anthropic’s Mythos raise risks",
+     "pub": "Yahoo Finance",
+     "when": "Tue, 05 May 2026 14:37:17 +0000"
+    },
+    {
+     "title": "Punjab National Bank (BOM:532461) Q1 2027 Earnings Call Highlights: Strong Growth Amidst ...",
+     "pub": "Yahoo Finance",
+     "when": "Mon, 20 Jul 2026 01:00:38 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "DLF",
+   "market": "IN",
+   "price": 758.75,
+   "prev": 769.2999877929688,
+   "high": 769.5499877929688,
+   "low": 751.9500122070312,
+   "gap": -0.29897151039441905,
+   "chg": -1.3713750110974865,
+   "rvol": 1.021966402444745,
+   "rsi": 69.44209043002257,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 763.4500122070312,
+   "orl": 757.9500122070312,
+   "orbHit": "09:30",
+   "atr5": 1.7071533203125,
+   "date": "2026-11-13",
+   "notional": 2279513383.75,
+   "score": 6.021966402444745,
+   "entry": 769.56,
+   "stop": 766.14,
+   "risk": 3.42,
+   "t1": 772.98,
+   "t2": 776.4,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "DLF Ltd (BOM:532868) Q4 2026 Earnings Call Highlights: Record Collections and Strong Financial ...",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 15 May 2026 01:03:40 +0000"
+    },
+    {
+     "title": "DLF Ltd (BOM:532868) Q3 2026 Earnings Call Highlights: Record Growth and Strategic Developments",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 23 Jan 2026 17:00:55 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "JSWSTEEL",
+   "market": "IN",
+   "price": 1348,
+   "prev": 1352.0999755859375,
+   "high": 1355.4000244140625,
+   "low": 1336.4000244140625,
+   "gap": -0.6656312523117824,
+   "chg": -0.303230209301697,
+   "rvol": 0.6844378007969915,
+   "rsi": 64.62661092429386,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 1349,
+   "orl": 1340.5999755859375,
+   "orbHit": "09:30",
+   "atr5": 1.9285714285714286,
+   "date": "2026-11-13",
+   "notional": 2172711792,
+   "score": 5.684437800796991,
+   "entry": 1355.41,
+   "stop": 1351.55,
+   "risk": 3.86,
+   "t1": 1359.27,
+   "t2": 1363.13,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [],
+   "moving": false
+  },
+  {
+   "t": "LT",
+   "market": "IN",
+   "price": 4143.7998046875,
+   "prev": 4159.2001953125,
+   "high": 4193.60009765625,
+   "low": 4127.60009765625,
+   "gap": -0.33900983348050806,
+   "chg": -0.37027288665634206,
+   "rvol": 0.6360664152183412,
+   "rsi": 70.24390474254405,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 4154,
+   "orl": 4130.39990234375,
+   "orbHit": "09:35",
+   "atr5": 4.378522600446429,
+   "date": "2026-11-13",
+   "notional": 6570802631.293945,
+   "score": 5.636066415218341,
+   "entry": 4193.61,
+   "stop": 4184.85,
+   "risk": 8.76,
+   "t1": 4202.37,
+   "t2": 4211.13,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "L&amp;T secures order for Noida Metro Aqua Line extension project",
+     "pub": "Yahoo Finance",
+     "when": "Wed, 11 Nov 2026 09:07:39 +0000"
+    },
+    {
+     "title": "Larsen &amp; Toubro Ltd (LTOUF) (Q2 2027) Earnings Call Highlights: Record INR1. ...",
+     "pub": "Yahoo Finance",
+     "when": "Sun, 01 Nov 2026 15:03:17 +0000"
+    }
+   ],
+   "moving": false
+  }
+ ]
+}

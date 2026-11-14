@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trade Scanner</title>
+<style>
+:root{--bg:#0e1116;--card:#171b22;--line:#262c36;--tx:#e6e9ef;--mut:#8b94a3;--up:#2ecc8f;--dn:#ff5d6c;--ac:#5b9dff}
+@media(prefers-color-scheme:light){:root{--bg:#f4f6f9;--card:#fff;--line:#dde2ea;--tx:#161a20;--mut:#667085;--up:#0f9d63;--dn:#d6334a;--ac:#2563eb}}
+*{box-sizing:border-box}body{margin:0 auto;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:16px;max-width:1200px}
+h1{font-size:20px;margin:0}.sub{color:var(--mut);font-size:12px;margin:2px 0 14px}
+.warn{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--mut);margin-bottom:14px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.chip,.inp{border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.inp{border-radius:8px;width:90px;cursor:text}.lbl{color:var(--mut);font-size:12px}.sp{flex:1}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.top{display:flex;justify-content:space-between;align-items:baseline}.tk{font-size:20px;font-weight:700}
+.tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff}.LONG{background:var(--up)}.SHORT{background:var(--dn)}
+.px{font-size:13px;color:var(--mut)}.setup{margin:6px 0;font-weight:600}
+.news{font-size:12px;color:var(--mut);margin:4px 0 10px;min-height:34px}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:6px}.g div{background:var(--bg);border-radius:8px;padding:6px 8px}
+.g b{display:block;font-size:11px;color:var(--mut);font-weight:500}.g span{font-weight:700;font-variant-numeric:tabular-nums}
+.sl{color:var(--dn)}.tg{color:var(--up)}
+button.copy{margin-top:10px;width:100%;padding:8px;border:0;border-radius:8px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:900px}th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+th{cursor:pointer;color:var(--mut);font-size:12px;user-select:none}th:hover{color:var(--tx)}
+th.l,td.l{text-align:left}tr:last-child td{border:0}
+.pos{color:var(--up)}.neg{color:var(--dn)}.note{font-size:11px;color:var(--mut);margin-top:14px}
+</style></head><body>
+<h1>Intraday Trade Scanner</h1>
+<div class="sub" id="meta"></div>
+<div class="warn">Paper-trading planning tool, not financial advice. Levels are computed from the last completed session (date above) as trigger plans for the next open. Re-check price, pre-market and news before acting.</div>
+<div class="bar">
+  <span class="lbl">Foreign acct $</span><input class="inp" id="acct" type="number" value="10000" min="100">
+  <span class="lbl">Indian acct ₹</span><input class="inp" id="acctIN" type="number" value="1000000" min="1000" style="width:110px">
+  <span class="lbl">Risk %</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+</div>
+<div class="bar"><span id="mkts"></span><span class="sp"></span><span id="chips"></span></div>
+<div class="cards" id="cards"></div>
+<div class="tw"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
+<div class="note">Long side only. Entry = last session high + 1 tick · Stop = entry − 2×ATR(14) of 5-min bars, rounded down · T1 = 1R, T2 = 2R · Shares = the smallest of four limits: max loss, position cap (75% of account), max order (80%), cash after a 10% buffer. Indian stocks are NSE and sized on the Indian account in ₹; foreign stocks are US and sized on the $ account. Setups: 20-day closing breakout, bull flag, reclaim of the 20-day average, oversold bounce, 15-min opening-range breakout. A matched rule is not a buy signal. Stops are plans, not guarantees. Flat by 15:55 ET (US) / 15:15 IST (India). Click a column header to sort.</div>
+<script>
+const DATA={
+ "generated": "2026-11-14T15:37:30.437Z",
+ "session": "2026-11-13",
+ "sessionIN": "2026-11-13",
+ "scanned": 159,
+ "universe": 172,
+ "matched": 82,
+ "config": {
+  "budget": 10000,
+  "maxLoss": 100,
+  "cash_buffer_pct": 10,
+  "max_position_pct": 75,
+  "max_order_usd": 8000,
+  "min_price": 5,
+  "min_volume": 1000000
+ },
+ "picks": [
+  {
+   "t": "U",
+   "market": "US",
+   "price": 52.810001373291016,
+   "prev": 50.18000030517578,
+   "high": 52.88999938964844,
+   "low": 49.709999084472656,
+   "gap": 0.6377036526068247,
+   "chg": 5.241134021762783,
+   "rvol": 0.9337059965242187,
+   "rsi": 70.99669083208224,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 51.040000915527344,
+   "orl": 49.74599838256836,
+   "orbHit": "09:45",
+   "atr5": 0.16425977434430802,
+   "date": "2026-11-13",
+   "notional": 646051151.8001556,
+   "score": 7.506046203053053,
+   "entry": 52.9,
+   "stop": 52.57,
+   "risk": 0.33,
+   "t1": 53.23,
+   "t2": 53.56,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Unity (U) Stock Sees Fair Value Lift After Q3 Spurs Higher Analyst Targets",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 20:08:42 +0000"
+    },
+    {
+     "title": "Is Unity Software (U) Near A Take Private Deal?",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 15:11:36 +0000"
+    }
+   ],
+   "moving": true
+  },
+  {
+   "t": "KO",
+   "market": "US",
+   "price": 99.25,
+   "prev": 97.44000244140625,
+   "high": 99.30000305175781,
+   "low": 97.95999908447266,
+   "gap": 0.7594394963347018,
+   "chg": 1.8575508140839414,
+   "rvol": 0.9721676060645782,
+   "rsi": 73.48383553309574,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 98.82499694824219,
+   "orl": 97.95999908447266,
+   "orbHit": "10:30",
+   "atr5": 0.09677178519112724,
+   "date": "2026-11-13",
+   "notional": 1788733125,
+   "score": 6.52943285028976,
+   "entry": 99.31,
+   "stop": 99.11,
+   "risk": 0.2,
+   "t1": 99.51,
+   "t2": 99.71,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "3 Consumer Compounders That Fit Warren Buffett's Playbook. I'd Hold Them Forever.",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 14:35:00 +0000"
+    },
+    {
+     "title": "KO Stock Alert: Coca-Cola Just Hit a New All-Time High",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 21:05:06 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "META",
+   "market": "US",
+   "price": 641.6900024414062,
+   "prev": 623.6099853515625,
+   "high": 643.9099731445312,
+   "low": 624.7899780273438,
+   "gap": 0.5772897653433473,
+   "chg": 2.899250735962977,
+   "rvol": 0.6293744698006346,
+   "rsi": 47.79424649268532,
+   "setups": [
+    "Reclaim 20-DMA",
+    "ORB Breakout"
+   ],
+   "orh": 634.9400024414062,
+   "orl": 625,
+   "orbHit": "09:50",
+   "atr5": 1.2159075055803572,
+   "date": "2026-11-13",
+   "notional": 9707165511.932373,
+   "score": 6.499149690589528,
+   "entry": 643.92,
+   "stop": 641.48,
+   "risk": 2.44,
+   "t1": 646.36,
+   "t2": 648.8,
+   "setup": "Reclaim 20-DMA",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Billionaire Bill Ackman Says There’s a Huge Disconnect in Wall Street’s Expectations for Amazon, Microsoft, Meta, and Alphabet",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 15:05:02 +0000"
+    },
+    {
+     "title": "Jamie Dimon Just Said 5 Words Blocking Outside AI Agents From JPMorgan Accounts: \"You Don't Want Rogue Agents.\" Here's Why That Security Stance Matters for JPM and Its Tech Rivals.",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 12:54:00 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "PEP",
+   "market": "US",
+   "price": 145.44000244140625,
+   "prev": 142.25999450683594,
+   "high": 145.77999877929688,
+   "low": 142.52999877929688,
+   "gap": 0.3795926935002969,
+   "chg": 2.2353494006479124,
+   "rvol": 0.8244968948500727,
+   "rsi": 66.34435956103164,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 144.16000366210938,
+   "orl": 142.52999877929688,
+   "orbHit": "10:00",
+   "atr5": 0.17601449148995535,
+   "date": "2026-11-13",
+   "notional": 1150721299.3164062,
+   "score": 6.495101715044447,
+   "entry": 145.79,
+   "stop": 145.43,
+   "risk": 0.36,
+   "t1": 146.15,
+   "t2": 146.51,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "A $9.2 Billion Fund Dumps These 3 Stocks",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 16:06:51 +0000"
+    },
+    {
+     "title": "Procter &amp; Gamble or PepsiCo: The One Dividend Stock I’d Hold for the Next 20 Years",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 13 Nov 2026 14:17:32 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "COST",
+   "market": "US",
+   "price": 1106.2099609375,
+   "prev": 1092.2099609375,
+   "high": 1109.5,
+   "low": 1092.6400146484375,
+   "gap": 0.21790726764381319,
+   "chg": 1.2818048269751303,
+   "rvol": 0.7866750898814383,
+   "rsi": 76.03356038984822,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 1105.219970703125,
+   "orl": 1092.6400146484375,
+   "orbHit": "09:45",
+   "atr5": 0.9195120675223214,
+   "date": "2026-11-13",
+   "notional": 2073148087.7929688,
+   "score": 6.171216537973978,
+   "entry": 1109.51,
+   "stop": 1107.67,
+   "risk": 1.84,
+   "t1": 1111.35,
+   "t2": 1113.19,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "Walmart just took another step to beat Costco that could backfire",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 14:33:00 +0000"
+    },
+    {
+     "title": "‘They’re Getting Insider Information From Costco Employees’: Inside the Pokemon Card Line Where Resellers Buy Executive Memberships",
+     "pub": "Yahoo Finance",
+     "when": "Sat, 14 Nov 2026 09:07:29 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "BAJFINANCE",
+   "market": "IN",
+   "price": 1117,
+   "prev": 1115,
+   "high": 1118,
+   "low": 1087.8499755859375,
+   "gap": -1.3452914798206317,
+   "chg": 0.17937219730941312,
+   "rvol": 1.1839325400530971,
+   "rsi": 71.9844945641174,
+   "setups": [
+    "20-Day Breakout",
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 1105.75,
+   "orl": 1091.75,
+   "orbHit": "09:30",
+   "atr5": 1.7071271623883928,
+   "date": "2026-11-13",
+   "notional": 13290310623,
+   "score": 8.23774419924592,
+   "entry": 1118.01,
+   "stop": 1114.59,
+   "risk": 3.42,
+   "t1": 1121.43,
+   "t2": 1124.85,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [],
+   "moving": false
+  },
+  {
+   "t": "PNB",
+   "market": "IN",
+   "price": 142.80999755859375,
+   "prev": 141.7899932861328,
+   "high": 145.13999938964844,
+   "low": 141.3699951171875,
+   "gap": -0.06347157215037535,
+   "chg": 0.7193767689956498,
+   "rvol": 2.016251448576372,
+   "rsi": 81.51984843372594,
+   "setups": [
+    "20-Day Breakout",
+    "ORB Breakout"
+   ],
+   "orh": 143.6699981689453,
+   "orl": 141.44000244140625,
+   "orbHit": "09:55",
+   "atr5": 0.2421449933733259,
+   "date": "2026-11-13",
+   "notional": 8745481745.911743,
+   "score": 7.232064479275067,
+   "entry": 145.15,
+   "stop": 144.66,
+   "risk": 0.49,
+   "t1": 145.64,
+   "t2": 146.13,
+   "setup": "20-Day Breakout",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "India's PNB hikes cybersecurity spend as AI models including Anthropic’s Mythos raise risks",
+     "pub": "Yahoo Finance",
+     "when": "Tue, 05 May 2026 14:37:17 +0000"
+    },
+    {
+     "title": "Punjab National Bank (BOM:532461) Q1 2027 Earnings Call Highlights: Strong Growth Amidst ...",
+     "pub": "Yahoo Finance",
+     "when": "Mon, 20 Jul 2026 01:00:38 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "DLF",
+   "market": "IN",
+   "price": 758.75,
+   "prev": 769.2999877929688,
+   "high": 769.5499877929688,
+   "low": 751.9500122070312,
+   "gap": -0.29897151039441905,
+   "chg": -1.3713750110974865,
+   "rvol": 1.021966402444745,
+   "rsi": 69.44209043002257,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 763.4500122070312,
+   "orl": 757.9500122070312,
+   "orbHit": "09:30",
+   "atr5": 1.7071533203125,
+   "date": "2026-11-13",
+   "notional": 2279513383.75,
+   "score": 6.021966402444745,
+   "entry": 769.56,
+   "stop": 766.14,
+   "risk": 3.42,
+   "t1": 772.98,
+   "t2": 776.4,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "DLF Ltd (BOM:532868) Q4 2026 Earnings Call Highlights: Record Collections and Strong Financial ...",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 15 May 2026 01:03:40 +0000"
+    },
+    {
+     "title": "DLF Ltd (BOM:532868) Q3 2026 Earnings Call Highlights: Record Growth and Strategic Developments",
+     "pub": "Yahoo Finance",
+     "when": "Fri, 23 Jan 2026 17:00:55 +0000"
+    }
+   ],
+   "moving": false
+  },
+  {
+   "t": "JSWSTEEL",
+   "market": "IN",
+   "price": 1348,
+   "prev": 1352.0999755859375,
+   "high": 1355.4000244140625,
+   "low": 1336.4000244140625,
+   "gap": -0.6656312523117824,
+   "chg": -0.303230209301697,
+   "rvol": 0.6844378007969915,
+   "rsi": 64.62661092429386,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 1349,
+   "orl": 1340.5999755859375,
+   "orbHit": "09:30",
+   "atr5": 1.9285714285714286,
+   "date": "2026-11-13",
+   "notional": 2172711792,
+   "score": 5.684437800796991,
+   "entry": 1355.41,
+   "stop": 1351.55,
+   "risk": 3.86,
+   "t1": 1359.27,
+   "t2": 1363.13,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [],
+   "moving": false
+  },
+  {
+   "t": "LT",
+   "market": "IN",
+   "price": 4143.7998046875,
+   "prev": 4159.2001953125,
+   "high": 4193.60009765625,
+   "low": 4127.60009765625,
+   "gap": -0.33900983348050806,
+   "chg": -0.37027288665634206,
+   "rvol": 0.6360664152183412,
+   "rsi": 70.24390474254405,
+   "setups": [
+    "Bull Flag",
+    "ORB Breakout"
+   ],
+   "orh": 4154,
+   "orl": 4130.39990234375,
+   "orbHit": "09:35",
+   "atr5": 4.378522600446429,
+   "date": "2026-11-13",
+   "notional": 6570802631.293945,
+   "score": 5.636066415218341,
+   "entry": 4193.61,
+   "stop": 4184.85,
+   "risk": 8.76,
+   "t1": 4202.37,
+   "t2": 4211.13,
+   "setup": "Bull Flag",
+   "dir": "LONG",
+   "news": [
+    {
+     "title": "L&amp;T secures order for Noida Metro Aqua Line extension project",
+     "pub": "Yahoo Finance",
+     "when": "Wed, 11 Nov 2026 09:07:39 +0000"
+    },
+    {
+     "title": "Larsen &amp; Toubro Ltd (LTOUF) (Q2 2027) Earnings Call Highlights: Record INR1. ...",
+     "pub": "Yahoo Finance",
+     "when": "Sun, 01 Nov 2026 15:03:17 +0000"
+    }
+   ],
+   "moving": false
+  }
+ ]
+};
+const P=DATA.picks;let mkt='All',filter='All',sortK='score',sortD=-1;
+const $=id=>document.getElementById(id), f=(x,d=2)=>Number(x).toFixed(d);
+const fm=(s,x,d=2)=>(s.market==='IN'?'₹':'$')+Number(x).toLocaleString(s.market==='IN'?'en-IN':'en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const mk=s=>s.market==='IN'?'NSE':'US';
+const dec=x=>String(x).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('meta').textContent='Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid stocks, '+DATA.matched+' matched a rule, top 5 per market shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
+function calc(s){const a=+$(s.market==='IN'?'acctIN':'acct').value||0,rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
+ const lim={'max loss':rd/s.risk,'position cap':a*C.max_position_pct/100/s.entry,'max order':a*0.8/s.entry,'cash':a*(1-C.cash_buffer_pct/100)/s.entry};
+ let q=Infinity,by='';for(const k in lim){const v=Math.floor(lim[k]);if(v<q){q=v;by=k}}q=Math.max(q,0);
+ return Object.assign({},s,{qty:q,by:by,riskAmt:q*s.risk,pos:q*s.entry})}
+function plan(s){return 'LONG '+s.t+' ('+mk(s)+') - '+s.setups.join(' + ')+'\n'+
+ 'Entry: buy above '+fm(s,s.entry)+' (break of last session high)\n'+
+ 'Stop-loss: '+fm(s,s.stop)+'\n'+
+ 'Target 1: '+fm(s,s.t1)+' (1R) | Target 2: '+fm(s,s.t2)+' (2R)\n'+
+ 'Qty: '+s.qty+' sh (~'+fm(s,s.pos,0)+', sized by '+s.by+') | Max loss at stop: '+fm(s,s.riskAmt,2)+'\n'+
+ 'Flat by '+(s.market==='IN'?'15:15 IST':'15:55 ET')+'. Catalyst: '+(s.news&&s.news[0]&&s.news[0].title?dec(s.news[0].title):'none found')}
+async function copy(i,btn){const t=plan(view()[i]);
+ try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e2){}a.remove()}
+ const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)}
+const cols=[['t','Ticker','l'],['dir','Side','l'],['price','Price'],['gap','Gap %'],['rvol','RVOL'],['setup','Setup','l'],['entry','Entry'],['stop','Stop'],['t1','T1'],['t2','T2'],['risk','R:R (T1/T2)'],['qty','Shares']];
+function view(){let v=P.map(calc);if(mkt!=='All')v=v.filter(s=>s.market===mkt);
+ if(filter!=='All')v=v.filter(s=>s.setups.indexOf(filter)>-1);
+ return v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD)}
+function render(){
+ const MK=[['All','All markets'],['IN','Indian stocks'],['US','Foreign (US) stocks']];
+ $('mkts').innerHTML=MK.map(m=>'<button class="chip '+(m[0]===mkt?'on':'')+'" data-m="'+m[0]+'">'+m[1]+'</button>').join(' ');
+ const sets=['All'].concat(Array.from(new Set([].concat.apply([],P.filter(s=>mkt==='All'||s.market===mkt).map(s=>s.setups)))));
+ $('chips').innerHTML=sets.map(s=>'<button class="chip '+(s===filter?'on':'')+'" data-f="'+esc(s)+'">'+esc(s)+'</button>').join(' ');
+ const v=view();
+ $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+esc(s.t)+' <small class="px">'+mk(s)+'</small></span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
+ '<div class="px">'+fm(s,s.price)+' · gap <span class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</span> · RVOL '+f(s.rvol)+'×'+(s.moving?' · <b class="neg">MOVING</b>':'')+'</div>'+
+ '<div class="setup">'+esc(s.setups.join(' + '))+(s.orbHit?' <span class="px">(ORB '+s.orbHit+')</span>':'')+'</div><div class="news">'+(s.news&&s.news[0]&&s.news[0].title?esc(dec(s.news[0].title))+' <i>('+esc(s.news[0].pub||'')+')</i>':'No headline found')+'</div>'+
+ '<div class="g"><div><b>Entry (buy above)</b><span>'+fm(s,s.entry)+'</span></div><div><b>Stop</b><span class="sl">'+fm(s,s.stop)+'</span></div>'+
+ '<div><b>Target 1 (1R)</b><span class="tg">'+fm(s,s.t1)+'</span></div><div><b>Target 2 (2R)</b><span class="tg">'+fm(s,s.t2)+'</span></div>'+
+ '<div><b>R:R (T1 / T2)</b><span>1 / 2</span></div><div><b>Shares</b><span>'+s.qty+'</span> <small class="px">'+s.by+'</small></div></div>'+
+ '<button class="copy" data-c="'+i+'">Copy Trade Plan</button></div>').join('')||'<div class="px">No setups match this filter.</div>';
+ $('head').innerHTML=cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
+ $('body').innerHTML=v.map(s=>'<tr><td class="l"><b>'+esc(s.t)+'</b> <small>'+mk(s)+'</small></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>'+fm(s,s.price)+'</td>'+
+ '<td class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</td><td>'+f(s.rvol)+'×</td><td class="l">'+esc(s.setups.join(' + '))+'</td><td>'+fm(s,s.entry)+'</td><td class="neg">'+fm(s,s.stop)+'</td>'+
+ '<td class="pos">'+fm(s,s.t1)+'</td><td class="pos">'+fm(s,s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('')}
+document.addEventListener('click',e=>{const t=e.target;
+ if(t.dataset.m){mkt=t.dataset.m;filter='All';render()}
+ else if(t.dataset.f){filter=t.dataset.f;render()}
+ else if(t.dataset.k){const k=t.dataset.k;sortD=sortK===k?-sortD:(['t','dir','setup'].includes(k)?1:-1);sortK=k;render()}
+ else if(t.dataset.c!==undefined)copy(+t.dataset.c,t)});
+['acct','acctIN','rpct'].forEach(i=>$(i).addEventListener('input',render));
+render();
+</script>
+</body></html>

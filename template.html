@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trade Scanner</title>
+<style>
+:root{--bg:#0e1116;--card:#171b22;--line:#262c36;--tx:#e6e9ef;--mut:#8b94a3;--up:#2ecc8f;--dn:#ff5d6c;--ac:#5b9dff}
+@media(prefers-color-scheme:light){:root{--bg:#f4f6f9;--card:#fff;--line:#dde2ea;--tx:#161a20;--mut:#667085;--up:#0f9d63;--dn:#d6334a;--ac:#2563eb}}
+*{box-sizing:border-box}body{margin:0 auto;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:16px;max-width:1200px}
+h1{font-size:20px;margin:0}.sub{color:var(--mut);font-size:12px;margin:2px 0 14px}
+.warn{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--mut);margin-bottom:14px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.chip,.inp{border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.inp{border-radius:8px;width:90px;cursor:text}.lbl{color:var(--mut);font-size:12px}.sp{flex:1}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.top{display:flex;justify-content:space-between;align-items:baseline}.tk{font-size:20px;font-weight:700}
+.tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff}.LONG{background:var(--up)}.SHORT{background:var(--dn)}
+.px{font-size:13px;color:var(--mut)}.setup{margin:6px 0;font-weight:600}
+.news{font-size:12px;color:var(--mut);margin:4px 0 10px;min-height:34px}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:6px}.g div{background:var(--bg);border-radius:8px;padding:6px 8px}
+.g b{display:block;font-size:11px;color:var(--mut);font-weight:500}.g span{font-weight:700;font-variant-numeric:tabular-nums}
+.sl{color:var(--dn)}.tg{color:var(--up)}
+button.copy{margin-top:10px;width:100%;padding:8px;border:0;border-radius:8px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:900px}th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+th{cursor:pointer;color:var(--mut);font-size:12px;user-select:none}th:hover{color:var(--tx)}
+th.l,td.l{text-align:left}tr:last-child td{border:0}
+.pos{color:var(--up)}.neg{color:var(--dn)}.note{font-size:11px;color:var(--mut);margin-top:14px}
+</style></head><body>
+<h1>Intraday Trade Scanner</h1>
+<div class="sub" id="meta"></div>
+<div class="warn">Paper-trading planning tool, not financial advice. Levels are computed from the last completed session (date above) as trigger plans for the next open. Re-check price, pre-market and news before acting.</div>
+<div class="bar">
+  <span class="lbl">Account $</span><input class="inp" id="acct" type="number" value="10000" min="100">
+  <span class="lbl">Risk %</span><input class="inp" id="rpct" type="number" value="1" step="0.25" min="0.1">
+  <span class="sp"></span><span id="chips"></span>
+</div>
+<div class="cards" id="cards"></div>
+<div class="tw"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
+<div class="note">Long side only. Entry = last session high + 1¢ · Stop = entry − 2×ATR(14) of 5-min bars, rounded down · T1 = 1R, T2 = 2R · Shares = the smallest of four limits: max loss (risk $ ÷ per-share risk), position cap (75% of account), max order (80%), cash after a 10% buffer. Setups: 20-day closing breakout, bull flag, reclaim of the 20-day average, oversold bounce, 15-min opening-range breakout. A matched rule is not a buy signal. Stops are plans, not guarantees. Flat by 15:55 ET. Click a column header to sort.</div>
+<script>
+const DATA=/*DATA*/;
+const P=DATA.picks;let filter='All',sortK='score',sortD=-1;
+const $=id=>document.getElementById(id), f=(x,d=2)=>Number(x).toFixed(d);
+const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('meta').textContent='Session '+DATA.session+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid US stocks, '+DATA.matched+' matched a rule, top 5 shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
+function calc(s){const a=+$('acct').value||0,rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
+ const lim={'max loss':rd/s.risk,'position cap':a*C.max_position_pct/100/s.entry,'max order':a*0.8/s.entry,'cash':a*(1-C.cash_buffer_pct/100)/s.entry};
+ let q=Infinity,by='';for(const k in lim){const v=Math.floor(lim[k]);if(v<q){q=v;by=k}}q=Math.max(q,0);
+ return Object.assign({},s,{qty:q,by:by,riskAmt:q*s.risk,pos:q*s.entry})}
+function plan(s){return 'LONG '+s.t+' - '+s.setups.join(' + ')+'\n'+
+ 'Entry: buy above $'+f(s.entry)+' (break of last session high)\n'+
+ 'Stop-loss: $'+f(s.stop)+'\n'+
+ 'Target 1: $'+f(s.t1)+' (1R) | Target 2: $'+f(s.t2)+' (2R)\n'+
+ 'Qty: '+s.qty+' sh (~$'+f(s.pos,0)+', sized by '+s.by+') | Max loss at stop: $'+f(s.riskAmt,2)+'\n'+
+ 'Flat by 15:55 ET. Catalyst: '+(s.news&&s.news[0]?s.news[0].title:'none found')}
+async function copy(i,btn){const t=plan(view()[i]);
+ try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e2){}a.remove()}
+ const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)}
+const cols=[['t','Ticker','l'],['dir','Side','l'],['price','Price'],['gap','Gap %'],['rvol','RVOL'],['setup','Setup','l'],['entry','Entry'],['stop','Stop'],['t1','T1'],['t2','T2'],['risk','R:R (T1/T2)'],['qty','Shares']];
+function view(){let v=P.map(calc);if(filter!=='All')v=v.filter(s=>s.setups.indexOf(filter)>-1);
+ return v.sort((a,b)=>(a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD)}
+function render(){
+ const sets=['All'].concat(Array.from(new Set([].concat.apply([],P.map(s=>s.setups)))));
+ $('chips').innerHTML=sets.map(s=>'<button class="chip '+(s===filter?'on':'')+'" data-f="'+esc(s)+'">'+esc(s)+'</button>').join(' ');
+ const v=view();
+ $('cards').innerHTML=v.map((s,i)=>'<div class="card"><div class="top"><span class="tk">'+s.t+'</span><span class="tag '+s.dir+'">'+s.dir+'</span></div>'+
+ '<div class="px">$'+f(s.price)+' · gap <span class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</span> · RVOL '+f(s.rvol)+'×</div>'+
+ '<div class="setup">'+esc(s.setups.join(' + '))+(s.orbHit?' <span class="px">(ORB '+s.orbHit+' ET)</span>':'')+'</div><div class="news">'+(s.news&&s.news[0]?esc(s.news[0].title)+' <i>('+esc(s.news[0].pub||'')+')</i>':'No headline found')+'</div>'+
+ '<div class="g"><div><b>Entry (buy above)</b><span>$'+f(s.entry)+'</span></div><div><b>Stop</b><span class="sl">$'+f(s.stop)+'</span></div>'+
+ '<div><b>Target 1 (1R)</b><span class="tg">$'+f(s.t1)+'</span></div><div><b>Target 2 (2R)</b><span class="tg">$'+f(s.t2)+'</span></div>'+
+ '<div><b>R:R (T1 / T2)</b><span>1 / 2</span></div><div><b>Shares</b><span>'+s.qty+'</span> <small class="px">'+s.by+'</small></div></div>'+
+ '<button class="copy" data-c="'+i+'">Copy Trade Plan</button></div>').join('')||'<div class="px">No setups match this filter.</div>';
+ $('head').innerHTML=cols.map(c=>'<th class="'+(c[2]||'')+'" data-k="'+c[0]+'">'+c[1]+(sortK===c[0]?(sortD>0?' ▲':' ▼'):'')+'</th>').join('');
+ $('body').innerHTML=v.map(s=>'<tr><td class="l"><b>'+s.t+'</b></td><td class="l"><span class="tag '+s.dir+'">'+s.dir+'</span></td><td>$'+f(s.price)+'</td>'+
+ '<td class="'+(s.gap>=0?'pos':'neg')+'">'+f(s.gap)+'%</td><td>'+f(s.rvol)+'×</td><td class="l">'+esc(s.setups.join(' + '))+'</td><td>$'+f(s.entry)+'</td><td class="neg">$'+f(s.stop)+'</td>'+
+ '<td class="pos">$'+f(s.t1)+'</td><td class="pos">$'+f(s.t2)+'</td><td>1 / 2</td><td>'+s.qty+' <small>('+s.by+')</small></td></tr>').join('')}
+document.addEventListener('click',e=>{const t=e.target;
+ if(t.dataset.f){filter=t.dataset.f;render()}
+ else if(t.dataset.k){const k=t.dataset.k;sortD=sortK===k?-sortD:(['t','dir','setup'].includes(k)?1:-1);sortK=k;render()}
+ else if(t.dataset.c!==undefined)copy(+t.dataset.c,t)});
+['acct','rpct'].forEach(i=>$(i).addEventListener('input',render));
+render();
+</script></body></html>
