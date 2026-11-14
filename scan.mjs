@@ -43,7 +43,7 @@ for (let i = 0; i < UA.length; i += 8) for (const r of await Promise.all(UA.slic
 console.log(`scanned ${scanned} of ${UA.length} liquid names, ${hits.length} matched at least one rule`);
 for (const s of hits) s.score = s.setups.length * 2 + s.rvol + Math.max(s.chg, 0) * 0.3 + (s.setups.includes('ORB Breakout') ? 1 : 0);
 hits.sort((a, b) => b.score - a.score);
-const picks = ['US', 'IN'].flatMap(m => hits.filter(h => h.market === m).slice(0, 5));
+const picks = ['US', 'IN'].flatMap(m => hits.filter(h => h.market === m).slice(0, 10));
 for (const s of picks) {
   // trader-exit (long): entry = break of last session's high, stop = entry - 2 x 5-min ATR (rounded down), 1R / 2R targets
   s.entry = r2(s.high + 0.01); s.stop = down(s.entry - 2 * s.atr5); s.risk = r2(s.entry - s.stop);

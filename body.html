@@ -15,7 +15,7 @@ const fm=(s,x,d=2)=>(s.market==='IN'?'₹':'$')+Number(x).toLocaleString(s.marke
 const mk=s=>s.market==='IN'?'NSE':'US';
 const dec=x=>String(x).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-$('meta').textContent='Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid stocks, '+DATA.matched+' matched a rule, top 5 per market shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
+$('meta').textContent='Sessions: US '+DATA.session+', India '+DATA.sessionIN+' · scanned '+DATA.scanned+' of '+DATA.universe+' liquid stocks, '+DATA.matched+' matched a rule, top 10 per market shown · generated '+new Date(DATA.generated).toLocaleString()+' · source: Yahoo Finance';
 function calc(s){const a=+$(s.market==='IN'?'acctIN':'acct').value||0,rp=+$('rpct').value||0,rd=a*rp/100,C=DATA.config;
  const lim={'max loss':rd/s.risk,'position cap':a*C.max_position_pct/100/s.entry,'max order':a*0.8/s.entry,'cash':a*(1-C.cash_buffer_pct/100)/s.entry};
  let q=Infinity,by='';for(const k in lim){const v=Math.floor(lim[k]);if(v<q){q=v;by=k}}q=Math.max(q,0);
